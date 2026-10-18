@@ -1,0 +1,3 @@
+# copy to local.properties (never commit)
+sdk.dir=/path/to/Android/Sdk
+startio.appId=

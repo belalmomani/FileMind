@@ -1,0 +1,171 @@
+package com.filemind.smartmanager.ui
+
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.DocumentsContract
+import android.provider.MediaStore
+import android.webkit.MimeTypeMap
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.filemind.smartmanager.AppViewModel
+import com.filemind.smartmanager.core.*
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
+fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntry, Long) -> Boolean, initial: FileFilter?, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val all by vm.files.collectAsState()
+    val msg by vm.message.collectAsState()
+    val now = remember { System.currentTimeMillis() }
+    var filter by remember { mutableStateOf(FileFilter()) }
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(key) { filter = initial ?: vm.loadFilter(key); loaded = true }
+    LaunchedEffect(filter, loaded) { if (loaded && initial == null) vm.saveFilter(key, filter) }
+
+    val visible = remember(all, filter) { filter.apply(all.filter { base(it, now) }) }
+    val selected: SnapshotStateList<String> = remember { mutableStateListOf() }
+    val selEntries = visible.filter { it.path in selected }
+    var confirmDelete by remember { mutableStateOf(false) }
+    var pendingMove by remember { mutableStateOf(true) }
+    var pendingMedia by remember { mutableStateOf<List<FileEntry>>(emptyList()) }
+
+    BackHandler(selected.isNotEmpty()) { selected.clear() }
+
+    val destPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            runCatching { ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+            vm.transfer(selEntries, uri, pendingMove) { selected.clear() }
+        }
+    }
+    val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        vm.logDelete(pendingMedia, res.resultCode == Activity.RESULT_OK, if (res.resultCode != Activity.RESULT_OK) "ألغى المستخدم أو رفض النظام" else null)
+        selected.clear()
+    }
+
+    fun performDelete(entries: List<FileEntry>) {
+        val cr = ctx.contentResolver
+        val media = entries.filter { Uri.parse(it.path).authority == "media" }
+        val saf = entries - media.toSet()
+        if (saf.isNotEmpty()) {
+            val ok = saf.all { runCatching { DocumentsContract.deleteDocument(cr, Uri.parse(it.path)) }.getOrDefault(false) }
+            vm.logDelete(saf, ok, if (!ok) "تعذر حذف بعض الملفات" else null)
+        }
+        if (media.isNotEmpty()) {
+            pendingMedia = media
+            if (Build.VERSION.SDK_INT >= 30) {
+                val pi = MediaStore.createDeleteRequest(cr, media.map { Uri.parse(it.path) })
+                deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+            } else {
+                val ok = media.all { runCatching { cr.delete(Uri.parse(it.path), null, null) > 0 }.getOrDefault(false) }
+                vm.logDelete(media, ok, if (!ok) "رفض النظام الحذف" else null)
+            }
+        }
+        if (saf.isNotEmpty() && media.isEmpty()) selected.clear()
+    }
+
+    fun open(e: FileEntry) {
+        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(e.extension ?: "") ?: "*/*"
+        try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(e.path), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (ex: Exception) { vm.message.value = "لا يوجد تطبيق متوافق لفتح هذا الملف" }
+    }
+    fun share(list: List<FileEntry>) {
+        val uris = ArrayList(list.map { Uri.parse(it.path) })
+        val i = Intent(Intent.ACTION_SEND_MULTIPLE).setType("*/*").putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        ctx.startActivity(Intent.createChooser(i, "مشاركة"))
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (selected.isEmpty()) "$title (${visible.size})" else "محدد: ${selected.size}") },
+                navigationIcon = { TextButton(onBack) { Text("رجوع") } },
+                actions = {
+                    TextButton({ if (selected.size == visible.size) selected.clear() else { selected.clear(); selected.addAll(visible.map { it.path }) } }) { Text("تحديد الكل") }
+                },
+            )
+        },
+        bottomBar = {
+            if (selected.isNotEmpty()) BottomAppBar {
+                TextButton({ share(selEntries) }) { Text("مشاركة") }
+                TextButton({ pendingMove = false; destPicker.launch(null) }) { Text("نسخ") }
+                TextButton({ pendingMove = true; destPicker.launch(null) }) { Text("نقل") }
+                TextButton({ confirmDelete = true }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+            }
+        },
+    ) { pad ->
+        Column(Modifier.padding(pad)) {
+            FilterBar(filter, { filter = it }, onReset = { filter = FileFilter(); vm.resetFilter(key) })
+            val d = filter.describe()
+            if (d.isNotEmpty()) Text("الشروط: " + d.joinToString(" · "), Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
+            msg?.let { Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.primary) }
+            if (key.startsWith("STALE")) Text("هذه الملفات لم يتم تعديلها منذ ستة أشهر. هل تريد فتحها أو نقلها أو حذفها أو الاحتفاظ بها؟", Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+            if (visible.isEmpty()) Text("لا توجد ملفات مطابقة. (إن لم تمنح صلاحية أو مجلداً فقد لا تظهر ملفات.)", Modifier.padding(16.dp))
+            LazyColumn(Modifier.weight(1f)) {
+                items(visible, key = { it.path }) { e ->
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .combinedClickable(onClick = { if (selected.isNotEmpty()) { if (e.path in selected) selected.remove(e.path) else selected.add(e.path) } else open(e) },
+                                onLongClick = { if (e.path in selected) selected.remove(e.path) else selected.add(e.path) })
+                            .background(if (e.path in selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(Modifier.size(14.dp).clip(CircleShape).background(Color(if (e.isHidden) FileType.HIDDEN_ARGB else e.type.argb)))
+                        Column(Modifier.weight(1f)) {
+                            Text(e.name, maxLines = 1, style = MaterialTheme.typography.bodyLarge)
+                            Text("${fmtSize(e.size)} · ${fmtDate(e.modifiedMs)} · ${e.parent}", maxLines = 1, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (confirmDelete) AlertDialog(
+        onDismissRequest = { confirmDelete = false },
+        title = { Text("حذف ${selEntries.size} ملف؟") },
+        text = { Text("لا يمكن التراجع عن الحذف من داخل التطبيق.") },
+        confirmButton = { TextButton({ confirmDelete = false; performDelete(selEntries) }) { Text("حذف") } },
+        dismissButton = { TextButton({ confirmDelete = false }) { Text("إلغاء") } },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterBar(f: FileFilter, set: (FileFilter) -> Unit, onReset: () -> Unit) {
+    val now = remember { System.currentTimeMillis() }
+    Column(Modifier.padding(horizontal = 12.dp)) {
+        OutlinedTextField(f.query, { set(f.copy(query = it)) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("بحث بالاسم") })
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            item { FilterChip(f.minSize == 5 * MB, { set(f.copy(minSize = if (f.minSize == 5 * MB) null else 5 * MB)) }, { Text("≥ 5MB") }) }
+            item { FilterChip(f.minSize == 100 * MB, { set(f.copy(minSize = if (f.minSize == 100 * MB) null else 100 * MB)) }, { Text("≥ 100MB") }) }
+            item { FilterChip(f.modifiedBeforeMs != null, { set(f.copy(modifiedBeforeMs = if (f.modifiedBeforeMs != null) null else now - 183 * DAY_MS)) }, { Text("قبل 6 أشهر") }) }
+            item { FilterChip(!f.includeHidden, { set(f.copy(includeHidden = !f.includeHidden)) }, { Text("إخفاء المخفية") }) }
+            item { FilterChip(f.onlyNoExtension, { set(f.copy(onlyNoExtension = !f.onlyNoExtension)) }, { Text("بلا امتداد") }) }
+            item { FilterChip(true, { set(f.copy(combine = if (f.combine == Combine.AND) Combine.OR else Combine.AND)) }, { Text(if (f.combine == Combine.AND) "الشروط: AND" else "الشروط: OR") }) }
+            item { FilterChip(true, { set(f.copy(sortBy = SortBy.entries[(f.sortBy.ordinal + 1) % SortBy.entries.size])) }, { Text("فرز: " + when (f.sortBy) { SortBy.NAME -> "الاسم"; SortBy.SIZE -> "الحجم"; SortBy.MODIFIED -> "التاريخ" }) }) }
+            item { FilterChip(true, { set(f.copy(descending = !f.descending)) }, { Text(if (f.descending) "↓ تنازلي" else "↑ تصاعدي") }) }
+            item { AssistChip(onReset, { Text("إعادة ضبط") }) }
+        }
+    }
+}
