@@ -121,7 +121,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
             val d = filter.describe()
             if (d.isNotEmpty()) Text("الشروط: " + d.joinToString(" · "), Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
             msg?.let { Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.primary) }
-            if (key.startsWith("STALE")) Text("هذه الملفات لم يتم تعديلها منذ ستة أشهر. هل تريد فتحها أو نقلها أو حذفها أو الاحتفاظ بها؟", Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+            if (key.startsWith("CAT_STALE")) Text("لم يتم تعديل هذه الملفات منذ ${key.substringAfterLast('_')} أشهر. هل تريد فتحها أو نقلها أو حذفها أو الاحتفاظ بها؟", Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
             if (visible.isEmpty()) Text("لا توجد ملفات مطابقة. (إن لم تمنح صلاحية أو مجلداً فقد لا تظهر ملفات.)", Modifier.padding(16.dp))
             LazyColumn(Modifier.weight(1f)) {
                 items(visible, key = { it.path }) { e ->

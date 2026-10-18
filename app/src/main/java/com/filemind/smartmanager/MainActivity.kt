@@ -27,6 +27,8 @@ sealed interface Screen {
     data object Duplicates : Screen
     data object Archives : Screen
     data object Timeline : Screen
+    data object Similar : Screen
+    data object Compare : Screen
     data class Files(val key: String, val title: String, val category: Category?, val filter: FileFilter?, val folder: String? = null, val custom: ((com.filemind.smartmanager.core.FileEntry, Long) -> Boolean)? = null) : Screen
 }
 
@@ -49,16 +51,24 @@ class MainActivity : ComponentActivity() {
                     Surface(Modifier.fillMaxSize()) {
                         when (val s = stack.last()) {
                             Screen.Home -> HomeScreen(vm,
-                                openCategory = { c -> push(Screen.Files("CAT_${c.name}", c.titleAr, c, null)) },
+                                openCategory = { c ->
+                                    if (c == Category.STALE) {
+                                        val m = vm.reviewMonths.value
+                                        push(Screen.Files("CAT_STALE_$m", "تحتاج مراجعة — منذ $m أشهر", c, null,
+                                            custom = { e, now -> e.modifiedMs != null && now - e.modifiedMs > m * 30L * com.filemind.smartmanager.core.DAY_MS }))
+                                    } else push(Screen.Files("CAT_${c.name}", c.titleAr, c, null))
+                                },
                                 openQuery = { text, f -> push(Screen.Files("ASK_$text", "نتيجة: $text", null, f)) },
                                 openFolders = { push(Screen.Folders) }, openOps = { push(Screen.Ops) }, openSettings = { push(Screen.Settings) },
-                                openStorage = { push(Screen.Storage) }, openOrganizer = { push(Screen.Organizer) }, openDuplicates = { push(Screen.Duplicates) }, openArchives = { push(Screen.Archives) }, openTimeline = { push(Screen.Timeline) })
+                                openStorage = { push(Screen.Storage) }, openOrganizer = { push(Screen.Organizer) }, openDuplicates = { push(Screen.Duplicates) }, openArchives = { push(Screen.Archives) }, openTimeline = { push(Screen.Timeline) }, openCompare = { push(Screen.Compare) })
                             Screen.Folders -> FoldersScreen(vm, onOpen = { p -> push(Screen.Files("FOLDER_$p", p, null, FileFilter(folderContains = p), p)) }, onBack = ::pop)
                             Screen.Ops -> OperationsScreen(vm, ::pop)
                             Screen.Settings -> SettingsScreen(vm, mode, ::pop)
-                            Screen.Storage -> StorageScreen(vm, openType = { t -> push(Screen.Files("TYPE_${t.name}", t.name, null, com.filemind.smartmanager.core.FileFilter(types = setOf(t)))) }, onBack = ::pop)
+                            Screen.Storage -> StorageScreen(vm, openType = { t -> push(Screen.Files("TYPE_${t.name}", t.name, null, com.filemind.smartmanager.core.FileFilter(types = setOf(t)))) }, openFolder = { p -> push(Screen.Files("FOLDER_$p", p, null, com.filemind.smartmanager.core.FileFilter(folderContains = p), p)) }, onBack = ::pop)
                             Screen.Organizer -> OrganizerScreen(vm, ::pop)
-                            Screen.Duplicates -> DuplicatesScreen(vm, ::pop)
+                            Screen.Duplicates -> DuplicatesScreen(vm, ::pop, openSimilar = { push(Screen.Similar) })
+                            Screen.Similar -> SimilarImagesScreen(vm, ::pop)
+                            Screen.Compare -> CompareScreen(vm, ::pop)
                             Screen.Archives -> ArchivesScreen(vm, ::pop)
                             Screen.Timeline -> TimelineScreen(vm, openMonth = { t, pred -> push(Screen.Files("TL_$t", t, null, null, custom = pred)) }, onBack = ::pop)
                             is Screen.Files -> FileListScreen(vm, s.title, s.key,

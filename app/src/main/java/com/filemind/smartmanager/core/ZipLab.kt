@@ -3,6 +3,7 @@ package com.filemind.smartmanager.core
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
+import java.security.MessageDigest
 import java.util.zip.ZipException
 import java.util.zip.ZipInputStream
 
@@ -57,5 +58,16 @@ object ZipLab {
             }
         }
         return unsafe
+    }
+
+    /** One pass: (safe name, real size, SHA-256) for every file entry. Throws on corrupt/encrypted data. */
+    fun digest(input: InputStream): List<Triple<String, Long, String>> {
+        val out = ArrayList<Triple<String, Long, String>>()
+        forEachFile(input) { name, s ->
+            val md = MessageDigest.getInstance("SHA-256"); var n = 0L; val b = ByteArray(64 * 1024)
+            while (true) { val r = s.read(b); if (r < 0) break; md.update(b, 0, r); n += r }
+            out += Triple(name, n, md.digest().joinToString("") { "%02x".format(it) })
+        }
+        return out
     }
 }

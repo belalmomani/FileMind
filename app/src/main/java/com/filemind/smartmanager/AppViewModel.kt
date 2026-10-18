@@ -241,4 +241,64 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         message.value = if (ok) "تم التراجع: ${l.newName} ← ${l.oldName}" else "تعذر التراجع (تغيّر الملف أو رفض النظام)"
         if (ok) rescan()
     }
+
+    // ---- Visually similar images (perceptual hash; local only) ----
+    val similar = MutableStateFlow<List<List<FileEntry>>?>(null)
+    val similarProgress = MutableStateFlow<String?>(null)
+    val similarSkipped = MutableStateFlow(0)
+
+    fun scanSimilar() = viewModelScope.launch {
+        similarProgress.value = "جارٍ التحليل…"
+        val (groups, skipped) = withContext(Dispatchers.IO) {
+            val cr = getApplication<Application>().contentResolver
+            val imgs = files.value.filter { it.type == FileType.IMAGE }
+            val hashed = ArrayList<Pair<FileEntry, Long>>(); var skipped = 0
+            imgs.forEachIndexed { i, e ->
+                val h = ImageHasher.hash(cr, Uri.parse(e.path))
+                if (h == null) skipped++ else hashed += e to h
+                if (i % 25 == 0) similarProgress.value = "تحليل $i/${imgs.size}"
+            }
+            val byPath = hashed.associate { it.first.path to it.first }
+            PerceptualHash.cluster(hashed.map { it.first.path to it.second }, 6).map { g -> g.map { byPath.getValue(it) } } to skipped
+        }
+        similar.value = groups; similarSkipped.value = skipped; similarProgress.value = null
+    }
+
+    val reviewMonths = settings.reviewMonths.stateIn(viewModelScope, SharingStarted.Eagerly, 6)
+
+    // ---- Compare two sources / detect missing files (read-only) ----
+    val compareResult = MutableStateFlow<CompareUi?>(null)
+    val compareBusy = MutableStateFlow(false)
+
+    private class Loaded(val files: List<RelFile>, val failed: List<String>, val hash: (RelFile) -> String?, val error: String?)
+
+    private fun loadSource(cr: android.content.ContentResolver, s: SourceRef): Loaded {
+        if (s.zip) {
+            val digest = HashMap<String, String>(); val files = ArrayList<RelFile>(); var err: String? = null
+            try {
+                (cr.openInputStream(s.uri) ?: throw java.io.IOException("تعذر فتح الأرشيف")).use { ins ->
+                    ZipLab.digest(ins).forEach { (n, sz, h) -> files += RelFile(n, sz, null); digest[n] = h }
+                }
+            } catch (e: Exception) { err = "تعذرت قراءة الأرشيف «${s.label}»: ${e.message}" }
+            return Loaded(files, if (err != null) listOf("") else emptyList(), { digest[it.path] }, err)
+        }
+        val (files, failed) = RelScanner.scan(cr, s.uri)
+        return Loaded(files, failed, { f -> f.uri?.let { try { SafOps.sha256(cr, Uri.parse(it)) } catch (e: Exception) { null } } }, null)
+    }
+
+    fun runCompare(a: SourceRef, b: SourceRef) = viewModelScope.launch {
+        compareBusy.value = true; compareResult.value = null
+        val ui = withContext(Dispatchers.IO) {
+            try {
+                val cr = getApplication<Application>().contentResolver
+                val la = loadSource(cr, a); val lb = loadSource(cr, b)
+                CompareUi(SourceComparer.compare(la.files, lb.files, la.hash, lb.hash, la.failed, lb.failed),
+                    listOfNotNull(la.error, lb.error).joinToString(" — ").ifEmpty { null })
+            } catch (e: Exception) { CompareUi(emptyList(), "تعذرت المقارنة: ${e.message}") }
+        }
+        compareResult.value = ui; compareBusy.value = false
+    }
 }
+
+data class SourceRef(val uri: Uri, val zip: Boolean, val label: String)
+data class CompareUi(val rows: List<CompareRow>, val note: String?)

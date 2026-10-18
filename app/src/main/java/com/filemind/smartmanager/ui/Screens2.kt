@@ -65,7 +65,7 @@ fun rememberDeleter(vm: AppViewModel, onFinished: () -> Unit): (List<FileEntry>)
 }
 
 @Composable
-fun StorageScreen(vm: AppViewModel, openType: (FileType) -> Unit, onBack: () -> Unit) {
+fun StorageScreen(vm: AppViewModel, openType: (FileType) -> Unit, openFolder: (String) -> Unit, onBack: () -> Unit) {
     val files by vm.files.collectAsState()
     val byType = remember(files) { files.groupBy { it.type }.map { (t, l) -> Triple(t, l.size, l.sumOf { it.size }) }.sortedByDescending { it.third } }
     val total = files.sumOf { it.size }
@@ -88,7 +88,10 @@ fun StorageScreen(vm: AppViewModel, openType: (FileType) -> Unit, onBack: () -> 
                     }
                 }
             }
-            // TODO: true nested treemap per folder (squarified layout) with drill-down.
+        }
+        item {
+            Text("خريطة المجلدات (المساحة ∝ الحجم الفعلي للملفات المفحوصة)", style = MaterialTheme.typography.titleMedium)
+            StorageTreemap(files, openFolder)
         }
         items(byType) { (t, n, sz) ->
             Row(Modifier.fillMaxWidth().clickable { openType(t) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -104,7 +107,7 @@ fun StorageScreen(vm: AppViewModel, openType: (FileType) -> Unit, onBack: () -> 
 }
 
 @Composable
-fun DuplicatesScreen(vm: AppViewModel, onBack: () -> Unit) {
+fun DuplicatesScreen(vm: AppViewModel, onBack: () -> Unit, openSimilar: () -> Unit) {
     val groups by vm.duplicates.collectAsState()
     val prog by vm.dupProgress.collectAsState()
     val sel = remember { mutableStateListOf<String>() }
@@ -116,10 +119,12 @@ fun DuplicatesScreen(vm: AppViewModel, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onBack) { Text("رجوع") }; Spacer(Modifier.weight(1f))
+            OutlinedButton(openSimilar) { Text("صور متشابهة") }
+            Spacer(Modifier.width(8.dp))
             Button({ sel.clear(); vm.scanDuplicates() }, enabled = prog == null) { Text(prog ?: "فحص المكررات") }
         }
         Text("يُعتبر الملفان مكررين فقط عند تطابق الحجم وبصمة المحتوى SHA-256. لا يُحذف شيء تلقائياً.", style = MaterialTheme.typography.bodySmall)
-        // TODO: perceptual hash for visually similar (non-identical) images; folder exclusion list.
+        // TODO: folder exclusion list for the scan.
         if (groups == null && prog == null) Text("اضغط «فحص المكررات» (قد يستغرق وقتاً مع الملفات الكبيرة).")
         if (groups?.isEmpty() == true) Text("لم يُعثر على نسخ متطابقة.")
         if (removesAllCopies) Text("لا يمكن حذف كل النسخ في مجموعة؛ أبقِ نسخة واحدة على الأقل.", color = MaterialTheme.colorScheme.error)

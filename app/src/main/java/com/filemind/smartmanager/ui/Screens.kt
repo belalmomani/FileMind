@@ -38,13 +38,14 @@ private fun mediaPermissions(): Array<String> =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (String, FileFilter) -> Unit, openFolders: () -> Unit, openOps: () -> Unit, openSettings: () -> Unit, openStorage: () -> Unit, openOrganizer: () -> Unit, openDuplicates: () -> Unit, openArchives: () -> Unit, openTimeline: () -> Unit) {
+fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (String, FileFilter) -> Unit, openFolders: () -> Unit, openOps: () -> Unit, openSettings: () -> Unit, openStorage: () -> Unit, openOrganizer: () -> Unit, openDuplicates: () -> Unit, openArchives: () -> Unit, openTimeline: () -> Unit, openCompare: () -> Unit) {
     val ctx = LocalContext.current
     val files by vm.files.collectAsState()
     val scanning by vm.scanning.collectAsState()
     val failed by vm.failedFolders.collectAsState()
     val roots by vm.roots.collectAsState()
     val now = remember(files) { System.currentTimeMillis() }
+    val reviewMonths by vm.reviewMonths.collectAsState()
     var granted by remember { mutableStateOf(mediaPermissions().all { ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED }) }
     var showRationale by remember { mutableStateOf(false) }
     var ask by remember { mutableStateOf("") }
@@ -70,7 +71,9 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     }
     LaunchedEffect(Unit) { vm.rescan() }
 
-    val counts = remember(files) { Category.entries.associateWith { c -> files.count { c.test(it, now) } } }
+    val counts = remember(files, reviewMonths) { Category.entries.associateWith { c ->
+        if (c == Category.STALE) files.count { it.modifiedMs != null && now - it.modifiedMs > reviewMonths * 30L * DAY_MS } else files.count { c.test(it, now) }
+    } }
     val totalSize = remember(files) { files.sumOf { it.size } }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -114,11 +117,14 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
             OutlinedButton(openDuplicates) { Text("المكررات") }
             OutlinedButton(openArchives) { Text("الأرشيفات") }
         }
-        OutlinedButton(openTimeline) { Text("آلة الزمن") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(openTimeline) { Text("آلة الزمن") }
+            OutlinedButton(openCompare) { Text("مقارنة / مفقود") }
+        }
         LazyVerticalGrid(GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(Category.entries.toList()) { c ->
                 Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(c.argb).copy(alpha = 0.85f)).clickable { openCategory(c) }.padding(12.dp).fillMaxWidth()) {
-                    Text(c.titleAr, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2)
+                    Text(if (c == Category.STALE) "تحتاج مراجعة — منذ $reviewMonths أشهر" else c.titleAr, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2)
                     Text("${counts[c]}", color = Color.White, style = MaterialTheme.typography.headlineSmall)
                 }
             }
@@ -185,6 +191,7 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
     val roots by vm.roots.collectAsState()
     val confirm by vm.settings.confirmDelete.collectAsState(initial = true)
     val retention by vm.settings.logRetentionDays.collectAsState(initial = 0)
+    val reviewMonths by vm.reviewMonths.collectAsState()
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { TextButton(onBack) { Text("رجوع") }; Text("المظهر", style = MaterialTheme.typography.titleMedium) }
         items(ThemeMode.entries.toList()) { m ->
@@ -196,6 +203,13 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
         item { Text("المجلدات المضافة", style = MaterialTheme.typography.titleMedium) }
         items(roots.toList()) { r -> Row(verticalAlignment = Alignment.CenterVertically) { Text(r, Modifier.weight(1f), maxLines = 1); TextButton({ vm.removeRoot(r) }) { Text("إزالة") } } }
         item { Row(verticalAlignment = Alignment.CenterVertically) { Switch(confirm, { scope.launch { vm.settings.setConfirmDelete(it) } }); Text("  تأكيد قبل الحذف (الحذف يُؤكَّد دائماً حالياً)") } }
+        item {
+            Text("فترة «تحتاج مراجعة»", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(1, 3, 6, 12, 24).forEach { m -> FilterChip(reviewMonths == m, { scope.launch { vm.settings.setReviewMonths(m) } }, { Text("$m أشهر") }) }
+            }
+            Text("تُحسب من تاريخ التعديل فقط، ولا يعني ذلك أن الملف غير ضروري.", style = MaterialTheme.typography.bodySmall)
+        }
         item {
             Text("الاحتفاظ بسجل العمليات", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
