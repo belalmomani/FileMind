@@ -22,6 +22,9 @@ sealed interface Screen {
     data object Folders : Screen
     data object Ops : Screen
     data object Settings : Screen
+    data object Storage : Screen
+    data object Organizer : Screen
+    data object Duplicates : Screen
     data class Files(val key: String, val title: String, val category: Category?, val filter: FileFilter?, val folder: String? = null) : Screen
 }
 
@@ -46,10 +49,14 @@ class MainActivity : ComponentActivity() {
                             Screen.Home -> HomeScreen(vm,
                                 openCategory = { c -> push(Screen.Files("CAT_${c.name}", c.titleAr, c, null)) },
                                 openQuery = { text, f -> push(Screen.Files("ASK_$text", "نتيجة: $text", null, f)) },
-                                openFolders = { push(Screen.Folders) }, openOps = { push(Screen.Ops) }, openSettings = { push(Screen.Settings) })
+                                openFolders = { push(Screen.Folders) }, openOps = { push(Screen.Ops) }, openSettings = { push(Screen.Settings) },
+                                openStorage = { push(Screen.Storage) }, openOrganizer = { push(Screen.Organizer) }, openDuplicates = { push(Screen.Duplicates) })
                             Screen.Folders -> FoldersScreen(vm, onOpen = { p -> push(Screen.Files("FOLDER_$p", p, null, FileFilter(folderContains = p), p)) }, onBack = ::pop)
                             Screen.Ops -> OperationsScreen(vm, ::pop)
                             Screen.Settings -> SettingsScreen(vm, mode, ::pop)
+                            Screen.Storage -> StorageScreen(vm, openType = { t -> push(Screen.Files("TYPE_${t.name}", t.name, null, com.filemind.smartmanager.core.FileFilter(types = setOf(t)))) }, onBack = ::pop)
+                            Screen.Organizer -> OrganizerScreen(vm, ::pop)
+                            Screen.Duplicates -> DuplicatesScreen(vm, ::pop)
                             is Screen.Files -> FileListScreen(vm, s.title, s.key,
                                 base = s.category?.test ?: { _, _ -> true }, initial = s.filter, onBack = ::pop)
                         }

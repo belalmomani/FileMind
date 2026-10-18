@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.update
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val settings = SettingsRepository(app)
@@ -38,7 +39,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val acc = ArrayList<FileEntry>(); val fail = ArrayList<String>()
             MediaScanner(cr).scan().let { acc += it.files; fail += it.failedFolders }
             roots.value.forEach { r -> SafScanner(cr).scan(Uri.parse(r)).let { acc += it.files; fail += it.failedFolders } }
-            acc to fail
+            dedupeAcrossSources(acc) to fail
         }
         files.value = all; failedFolders.value = failed; scanning.value = false
     }
@@ -85,4 +86,78 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearLog() = viewModelScope.launch { db.logs().clear() }
+
+    /** The same physical file can appear via MediaStore AND a granted folder; keep the folder entry only. */
+    private fun dedupeAcrossSources(all: List<FileEntry>): List<FileEntry> {
+        fun isMedia(e: FileEntry) = Uri.parse(e.path).authority == "media"
+        fun key(e: FileEntry) = Triple(e.name, e.size, (e.modifiedMs ?: -1L) / 1000)
+        val saf = all.filter { !isMedia(it) }.map(::key).toSet()
+        return all.filter { !isMedia(it) || key(it) !in saf }
+    }
+
+    private suspend fun logResults(type: String, results: List<OpResult>) {
+        val now = System.currentTimeMillis()
+        results.forEach { r ->
+            db.logs().insert(OperationLog(type = type, timeMs = now, oldName = r.entry.name, newName = r.entry.name,
+                oldPath = r.entry.path, newPath = r.newPath, size = r.entry.size, status = r.status.name, reason = r.reason))
+        }
+        message.value = "اكتمل: ${results.count { it.status == TransferStatus.DONE }} ناجح، ${results.count { it.status == TransferStatus.SKIPPED }} متجاوَز، ${results.count { it.status == TransferStatus.FAILED }} فشل، ${results.count { it.status == TransferStatus.CANCELLED }} ملغى"
+    }
+
+    // ---- Duplicates (exact content only; never deletes by itself) ----
+    val duplicates = MutableStateFlow<List<List<FileEntry>>?>(null)
+    val dupProgress = MutableStateFlow<String?>(null)
+
+    fun scanDuplicates() = viewModelScope.launch {
+        dupProgress.value = "جارٍ الفحص…"
+        val groups = withContext(Dispatchers.IO) {
+            val cr = getApplication<Application>().contentResolver
+            val out = ArrayList<List<FileEntry>>()
+            files.value.filter { it.size > 0 }.groupBy { it.size }.filter { it.value.size > 1 }.values.forEach { same ->
+                same.mapNotNull { e -> try { SafOps.sha256(cr, Uri.parse(e.path)) to e } catch (ex: Exception) { null } }
+                    .groupBy({ it.first }, { it.second }).values.filter { it.size > 1 }.forEach { out += it }
+            }
+            out
+        }
+        duplicates.value = groups; dupProgress.value = null
+    }
+
+    // ---- Organizer execution (plan comes from the pure Organizer; files are MOVED only after user confirmation) ----
+    fun runOrganize(plan: OrganizePlan, destTree: Uri, onDone: () -> Unit) = viewModelScope.launch {
+        applyAll = null; AdsManager.fileOperationInProgress = true; message.value = "جارٍ التنظيم…"
+        val results = withContext(Dispatchers.IO) {
+            val cr = getApplication<Application>().contentResolver
+            val t = SafTransfer(getApplication(), ::ask)
+            val out = ArrayList<OpResult>()
+            for ((dir, group) in plan.moves.groupBy { it.targetDir }) {
+                val id = try { SafOps.ensureFolder(cr, destTree, dir.split('/').filter { it.isNotBlank() }) }
+                catch (e: Exception) { group.forEach { out += OpResult(it.entry, TransferStatus.FAILED, e.message, "") }; continue }
+                val r = t.runInDir(group.map { it.entry }, destTree, id, true)
+                out += r
+                if (r.any { it.status == TransferStatus.CANCELLED }) break
+            }
+            out
+        }
+        logResults("تنظيم", results)
+        AdsManager.fileOperationInProgress = false
+        onDone(); rescan()
+    }
+
+    // ---- Bulk rename (SAF documents only) ----
+    fun runRename(items: List<RenamePreview>, onDone: () -> Unit) = viewModelScope.launch {
+        message.value = "جارٍ إعادة التسمية…"
+        val results = withContext(Dispatchers.IO) {
+            val cr = getApplication<Application>().contentResolver
+            items.map { p ->
+                val u = Uri.parse(p.entry.path)
+                when {
+                    u.authority == "media" -> OpResult(p.entry, TransferStatus.FAILED, "إعادة التسمية تدعم ملفات المجلدات المضافة فقط", "")
+                    else -> SafOps.rename(cr, u, p.newName)?.let { OpResult(p.entry, TransferStatus.DONE, "${p.entry.name} ← ${p.newName}", it.toString()) }
+                        ?: OpResult(p.entry, TransferStatus.FAILED, "رفض مزوّد التخزين إعادة التسمية", "")
+                }
+            }
+        }
+        logResults("إعادة تسمية", results)
+        onDone(); rescan()
+    }
 }

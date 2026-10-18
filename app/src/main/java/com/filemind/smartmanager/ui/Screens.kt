@@ -37,7 +37,7 @@ private fun mediaPermissions(): Array<String> =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (String, FileFilter) -> Unit, openFolders: () -> Unit, openOps: () -> Unit, openSettings: () -> Unit) {
+fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (String, FileFilter) -> Unit, openFolders: () -> Unit, openOps: () -> Unit, openSettings: () -> Unit, openStorage: () -> Unit, openOrganizer: () -> Unit, openDuplicates: () -> Unit) {
     val ctx = LocalContext.current
     val files by vm.files.collectAsState()
     val scanning by vm.scanning.collectAsState()
@@ -90,6 +90,11 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
             OutlinedButton(openFolders) { Text("المجلدات") }
             OutlinedButton(openOps) { Text("العمليات") }
             OutlinedButton(openSettings) { Text("الإعدادات") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(openStorage) { Text("التخزين") }
+            OutlinedButton(openOrganizer) { Text("التنظيم") }
+            OutlinedButton(openDuplicates) { Text("المكررات") }
         }
         LazyVerticalGrid(GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(Category.entries.toList()) { c ->

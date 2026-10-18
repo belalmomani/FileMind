@@ -27,8 +27,10 @@ private data class Existing(val uri: Uri, val size: Long, val modified: Long?)
 class SafTransfer(ctx: Context, private val ask: suspend (UiConflict) -> ConflictDecision) {
     private val cr = ctx.contentResolver
 
-    suspend fun run(sources: List<FileEntry>, destTree: Uri, move: Boolean): List<OpResult> {
-        val destId = DocumentsContract.getTreeDocumentId(destTree)
+    suspend fun run(sources: List<FileEntry>, destTree: Uri, move: Boolean): List<OpResult> =
+        runInDir(sources, destTree, DocumentsContract.getTreeDocumentId(destTree), move)
+
+    suspend fun runInDir(sources: List<FileEntry>, destTree: Uri, destId: String, move: Boolean): List<OpResult> {
         val destDir = DocumentsContract.buildDocumentUriUsingTree(destTree, destId)
         val out = ArrayList<OpResult>()
         for ((i, s) in sources.withIndex()) {

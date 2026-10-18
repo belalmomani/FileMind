@@ -48,6 +48,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
     val selEntries = visible.filter { it.path in selected }
     var confirmDelete by remember { mutableStateOf(false) }
     var pendingMove by remember { mutableStateOf(true) }
+    var showRename by remember { mutableStateOf(false) }
     var pendingMedia by remember { mutableStateOf<List<FileEntry>>(emptyList()) }
 
     BackHandler(selected.isNotEmpty()) { selected.clear() }
@@ -110,6 +111,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
                 TextButton({ share(selEntries) }) { Text("مشاركة") }
                 TextButton({ pendingMove = false; destPicker.launch(null) }) { Text("نسخ") }
                 TextButton({ pendingMove = true; destPicker.launch(null) }) { Text("نقل") }
+                TextButton({ showRename = true }) { Text("تسمية") }
                 TextButton({ confirmDelete = true }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
             }
         },
@@ -141,6 +143,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
             }
         }
     }
+    if (showRename) RenameDialog(vm, selEntries, onDismiss = { showRename = false }, onDone = { showRename = false; selected.clear() })
     if (confirmDelete) AlertDialog(
         onDismissRequest = { confirmDelete = false },
         title = { Text("حذف ${selEntries.size} ملف؟") },
