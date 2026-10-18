@@ -38,4 +38,17 @@ object SafOps {
         }
         return id
     }
+
+    fun childExists(cr: ContentResolver, tree: Uri, dirId: String, name: String): Boolean {
+        var found = false
+        cr.query(DocumentsContract.buildChildDocumentsUriUsingTree(tree, dirId), arrayOf(Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { c ->
+            while (c.moveToNext()) { if (c.getString(0) == name) { found = true; break } }
+        }
+        return found
+    }
+
+    fun createFile(cr: ContentResolver, tree: Uri, dirId: String, name: String): Uri? {
+        val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
+        return try { DocumentsContract.createDocument(cr, DocumentsContract.buildDocumentUriUsingTree(tree, dirId), mime, name) } catch (e: Exception) { null }
+    }
 }

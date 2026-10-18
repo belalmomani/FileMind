@@ -3,8 +3,7 @@
 |---|---|
 | READ_MEDIA_IMAGES / VIDEO / AUDIO (Android 13+) | التصنيفات والبحث في الوسائط عبر MediaStore |
 | READ_EXTERNAL_STORAGE (حتى Android 12) | نفس الغرض في الإصدارات الأقدم |
-| RECORD_AUDIO (اختيارية) | الأوامر الصوتية؛ التطبيق يعمل كاملاً بدونها |
-| INTERNET / ACCESS_NETWORK_STATE | إعلانات Start.io والتعرف الصوتي إن كان سحابياً |
+| INTERNET / ACCESS_NETWORK_STATE | إعلانات Start.io (والتعرف الصوتي يتم عبر خدمة النظام عبر Intent دون إذن ميكروفون) |
 
 **MANAGE_EXTERNAL_STORAGE غير مُعلنة عمداً.** الوصول لبقية المجلدات يتم عبر Storage Access Framework.
 إن قررت لاحقاً أن مستكشف الملفات الكامل هو الوظيفة الأساسية، فاطلبها فقط بعد مراجعة سياسة Google Play الحالية (All files access) وتعبئة نموذج التصريح.

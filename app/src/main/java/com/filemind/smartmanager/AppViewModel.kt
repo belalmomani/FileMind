@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val settings = SettingsRepository(app)
@@ -28,6 +29,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val conflict = MutableStateFlow<UiConflict?>(null)
     val logs = db.logs().all().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     val roots = settings.roots.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    init {
+        // Log retention: delete old log rows only (never files).
+        viewModelScope.launch {
+            val d = settings.logRetentionDays.first()
+            if (d > 0) db.logs().deleteOlderThan(System.currentTimeMillis() - d * 86_400_000L)
+        }
+    }
 
     private var pending: CompletableDeferred<Pair<ConflictDecision, Boolean>>? = null
     private var applyAll: ConflictDecision? = null
@@ -157,7 +166,79 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-        logResults("إعادة تسمية", results)
+        val now = System.currentTimeMillis()
+        results.zip(items).forEach { (r, p) ->
+            db.logs().insert(OperationLog(type = "إعادة تسمية", timeMs = now, oldName = p.entry.name, newName = p.newName, oldPath = p.entry.path,
+                newPath = r.newPath, size = p.entry.size, status = r.status.name, reason = if (r.status == TransferStatus.DONE) null else r.reason))
+        }
+        message.value = "اكتمل: ${results.count { it.status == TransferStatus.DONE }} ناجح، ${results.count { it.status == TransferStatus.FAILED }} فشل"
         onDone(); rescan()
+    }
+
+    // ---- Saved organize tasks ----
+    val tasks = db.tasks().all().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    fun saveTask(name: String, json: String) = viewModelScope.launch { db.tasks().put(SavedTaskEntity(name = name, json = json)) }
+    fun deleteTask(t: SavedTaskEntity) = viewModelScope.launch { db.tasks().delete(t) }
+
+    // ---- Archives (ZIP only) ----
+    val archive = MutableStateFlow<ArchiveState?>(null)
+
+    fun openArchive(e: FileEntry) = viewModelScope.launch {
+        if (e.extension != "zip") {
+            archive.value = ArchiveState(e, emptyList(), "تنسيق ${e.extension?.uppercase()} غير مدعوم حالياً: لا توجد مكتبة مرخّصة مضافة. تظهر معلومات الملف فقط.")
+            return@launch
+        }
+        val l = withContext(Dispatchers.IO) {
+            try { getApplication<Application>().contentResolver.openInputStream(Uri.parse(e.path))?.use { ZipLab.list(it) } ?: ZipLab.Listing(emptyList(), 0, "تعذر فتح الملف") }
+            catch (ex: Exception) { ZipLab.Listing(emptyList(), 0, "تعذر فتح الملف: ${ex.message}") }
+        }
+        archive.value = ArchiveState(e, l.items, listOfNotNull(l.error, if (l.unsafeSkipped > 0) "تم تجاهل ${l.unsafeSkipped} عنصراً بمسار غير آمن" else null).joinToString(" — ").ifEmpty { null })
+    }
+
+    /** names == null extracts everything. Existing files are NEVER replaced silently: they are skipped and counted. */
+    fun extractArchive(e: FileEntry, names: Set<String>?, destTree: Uri, onDone: () -> Unit) = viewModelScope.launch {
+        message.value = "جارٍ فك الضغط…"
+        val (counts, note) = withContext(Dispatchers.IO) {
+            val cr = getApplication<Application>().contentResolver
+            var done = 0; var skipped = 0; var failed = 0; var note: String? = null
+            try {
+                (cr.openInputStream(Uri.parse(e.path)) ?: throw java.io.IOException("تعذر فتح الأرشيف")).use { ins ->
+                    ZipLab.forEachFile(ins) { name, stream ->
+                        if (names != null && name !in names) return@forEachFile
+                        var doc: Uri? = null
+                        try {
+                            val segs = name.split('/')
+                            val dirId = SafOps.ensureFolder(cr, destTree, segs.dropLast(1))
+                            if (SafOps.childExists(cr, destTree, dirId, segs.last())) skipped++
+                            else {
+                                doc = SafOps.createFile(cr, destTree, dirId, segs.last()) ?: throw java.io.IOException("تعذر إنشاء الملف")
+                                (cr.openOutputStream(doc, "w") ?: throw java.io.IOException("تعذر الكتابة")).use { o -> stream.copyTo(o) }
+                                done++
+                            }
+                        } catch (ex: java.util.zip.ZipException) {
+                            doc?.let { runCatching { android.provider.DocumentsContract.deleteDocument(cr, it) } }; throw ex
+                        } catch (ex: Exception) {
+                            doc?.let { runCatching { android.provider.DocumentsContract.deleteDocument(cr, it) } }; failed++
+                        }
+                    }
+                }
+            } catch (ex: java.util.zip.ZipException) {
+                note = if (ex.message?.contains("encrypted", true) == true) "الأرشيف محمي بكلمة مرور (غير مدعوم)" else "الأرشيف تالف: ${ex.message}"
+            } catch (ex: Exception) { note = "فشل: ${ex.message}" }
+            intArrayOf(done, skipped, failed) to note
+        }
+        val summary = "استُخرج ${counts[0]}، متجاوَز (موجود) ${counts[1]}، فشل ${counts[2]}" + (note?.let { " — $it" } ?: "")
+        db.logs().insert(OperationLog(type = "فك ضغط", timeMs = System.currentTimeMillis(), oldName = e.name, newName = "", oldPath = e.path,
+            newPath = destTree.toString(), size = e.size, status = if (counts[2] == 0 && note == null) "DONE" else "FAILED", reason = summary))
+        message.value = summary
+        onDone(); rescan()
+    }
+
+    /** Undo is offered only for renames (the log keeps the new document URI + old name). Moves are NOT undoable yet. */
+    fun undoRename(l: OperationLog) = viewModelScope.launch {
+        val ok = withContext(Dispatchers.IO) { SafOps.rename(getApplication<Application>().contentResolver, Uri.parse(l.newPath), l.oldName) } != null
+        if (ok) db.logs().setStatus(l.id, "UNDONE")
+        message.value = if (ok) "تم التراجع: ${l.newName} ← ${l.oldName}" else "تعذر التراجع (تغيّر الملف أو رفض النظام)"
+        if (ok) rescan()
     }
 }

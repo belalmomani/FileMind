@@ -23,6 +23,7 @@ interface LogDao {
     @Insert suspend fun insert(l: OperationLog)
     @Query("SELECT * FROM operation_log ORDER BY timeMs DESC LIMIT 1000") fun all(): Flow<List<OperationLog>>
     @Query("DELETE FROM operation_log") suspend fun clear()
+    @Query("UPDATE operation_log SET status = :s WHERE id = :id") suspend fun setStatus(id: Long, s: String)
     @Query("DELETE FROM operation_log WHERE timeMs < :before") suspend fun deleteOlderThan(before: Long)
 }
 

@@ -25,7 +25,9 @@ sealed interface Screen {
     data object Storage : Screen
     data object Organizer : Screen
     data object Duplicates : Screen
-    data class Files(val key: String, val title: String, val category: Category?, val filter: FileFilter?, val folder: String? = null) : Screen
+    data object Archives : Screen
+    data object Timeline : Screen
+    data class Files(val key: String, val title: String, val category: Category?, val filter: FileFilter?, val folder: String? = null, val custom: ((com.filemind.smartmanager.core.FileEntry, Long) -> Boolean)? = null) : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -50,15 +52,17 @@ class MainActivity : ComponentActivity() {
                                 openCategory = { c -> push(Screen.Files("CAT_${c.name}", c.titleAr, c, null)) },
                                 openQuery = { text, f -> push(Screen.Files("ASK_$text", "نتيجة: $text", null, f)) },
                                 openFolders = { push(Screen.Folders) }, openOps = { push(Screen.Ops) }, openSettings = { push(Screen.Settings) },
-                                openStorage = { push(Screen.Storage) }, openOrganizer = { push(Screen.Organizer) }, openDuplicates = { push(Screen.Duplicates) })
+                                openStorage = { push(Screen.Storage) }, openOrganizer = { push(Screen.Organizer) }, openDuplicates = { push(Screen.Duplicates) }, openArchives = { push(Screen.Archives) }, openTimeline = { push(Screen.Timeline) })
                             Screen.Folders -> FoldersScreen(vm, onOpen = { p -> push(Screen.Files("FOLDER_$p", p, null, FileFilter(folderContains = p), p)) }, onBack = ::pop)
                             Screen.Ops -> OperationsScreen(vm, ::pop)
                             Screen.Settings -> SettingsScreen(vm, mode, ::pop)
                             Screen.Storage -> StorageScreen(vm, openType = { t -> push(Screen.Files("TYPE_${t.name}", t.name, null, com.filemind.smartmanager.core.FileFilter(types = setOf(t)))) }, onBack = ::pop)
                             Screen.Organizer -> OrganizerScreen(vm, ::pop)
                             Screen.Duplicates -> DuplicatesScreen(vm, ::pop)
+                            Screen.Archives -> ArchivesScreen(vm, ::pop)
+                            Screen.Timeline -> TimelineScreen(vm, openMonth = { t, pred -> push(Screen.Files("TL_$t", t, null, null, custom = pred)) }, onBack = ::pop)
                             is Screen.Files -> FileListScreen(vm, s.title, s.key,
-                                base = s.category?.test ?: { _, _ -> true }, initial = s.filter, onBack = ::pop)
+                                base = s.custom ?: s.category?.test ?: { _, _ -> true }, initial = s.filter, onBack = ::pop)
                         }
                     }
                     conflict?.let { c -> ConflictDialog(c) { d, all -> vm.answerConflict(d, all) } }

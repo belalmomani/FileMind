@@ -164,6 +164,9 @@ fun OrganizerScreen(vm: AppViewModel, onBack: () -> Unit) {
     var unknownFolder by remember { mutableStateOf(true) }
     var dest by remember { mutableStateOf<Uri?>(null) }
     var confirm by remember { mutableStateOf(false) }
+    val tasks by vm.tasks.collectAsState()
+    var showSave by remember { mutableStateOf(false) }
+    var taskName by remember { mutableStateOf("") }
 
     val rule = OrganizeRule(types, primary, secondary, ds, destRoot = "", unknownDateFolder = if (unknownFolder) "تاريخ غير معروف" else null)
     val plan = remember(files, types, primary, secondary, ds, unknownFolder) { Organizer.plan(files, rule) }
@@ -199,12 +202,31 @@ fun OrganizerScreen(vm: AppViewModel, onBack: () -> Unit) {
             if (ds == DateSource.EXIF) Text("الملفات بلا بيانات EXIF لا يُخترع لها تاريخ.", style = MaterialTheme.typography.bodySmall)
             msg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             Button({ confirm = true }, enabled = dest != null && plan.moves.isNotEmpty()) { Text("تنفيذ التنظيم") }
-            // TODO: save the rule as a named task (SavedTaskEntity) and re-run later with a fresh preview.
+            OutlinedButton({ showSave = true }) { Text("حفظ كمهمة") }
+            if (tasks.isNotEmpty()) Text("المهام المحفوظة (التحميل يعرض معاينة محدثة)", style = MaterialTheme.typography.titleSmall)
+            tasks.forEach { t ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton({
+                        OrganizeRuleJson.fromJson(t.json)?.let { (r, d) ->
+                            types = r.types; primary = r.primary; secondary = r.secondary; ds = r.dateSource
+                            unknownFolder = r.unknownDateFolder != null; dest = d?.let { Uri.parse(it) }
+                        }
+                    }, Modifier.weight(1f)) { Text(t.name) }
+                    TextButton({ vm.deleteTask(t) }) { Text("حذف") }
+                }
+            }
         }
         items(plan.moves.groupBy { it.targetDir }.entries.take(40).toList()) { (dir, list) ->
             Text("${dir.trimStart('/')} ← ${list.size} ملف", style = MaterialTheme.typography.bodySmall)
         }
     }
+    if (showSave) AlertDialog(
+        onDismissRequest = { showSave = false },
+        title = { Text("اسم المهمة") },
+        text = { OutlinedTextField(taskName, { taskName = it }, singleLine = true) },
+        confirmButton = { TextButton({ if (taskName.isNotBlank()) { vm.saveTask(taskName.trim(), OrganizeRuleJson.toJson(rule, dest?.toString())); taskName = ""; showSave = false } }) { Text("حفظ") } },
+        dismissButton = { TextButton({ showSave = false }) { Text("إلغاء") } },
+    )
     if (confirm) AlertDialog(
         onDismissRequest = { confirm = false },
         title = { Text("نقل ${plan.moves.size} ملف؟") },

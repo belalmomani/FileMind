@@ -7,8 +7,7 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <!-- Android 12 and below -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <!-- Optional features -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Voice commands use the system speech recognizer via intent: no RECORD_AUDIO needed. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- MANAGE_EXTERNAL_STORAGE intentionally NOT declared: see docs/PERMISSIONS.md -->
