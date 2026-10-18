@@ -14,7 +14,11 @@ jobs:
           for f in settings.gradle.kts build.gradle.kts app/build.gradle.kts app/src/main/AndroidManifest.xml; do
             if [ -f "$f" ]; then echo "OK       $f"; else echo "MISSING  $f"; MISSING=1; fi
           done
-          if [ -n "$MISSING" ]; then echo "::error::Core project files are missing or in the wrong folder (see list above)"; exit 1; fi
+          if [ -f docs/FILES.txt ]; then
+            echo "--- checking every expected file from docs/FILES.txt"
+            while IFS= read -r p; do [ -z "$p" ] || [ -f "$p" ] || { echo "MISSING  $p"; MISSING=1; }; done < docs/FILES.txt
+          fi
+          if [ -n "$MISSING" ]; then echo "::error::Project files are missing or in the wrong folder (see MISSING lines above)"; exit 1; fi
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       # Android SDK is preinstalled on ubuntu-latest runners (ANDROID_HOME); no setup-android action needed.
