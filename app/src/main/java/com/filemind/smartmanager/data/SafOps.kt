@@ -51,4 +51,13 @@ object SafOps {
         val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
         return try { DocumentsContract.createDocument(cr, DocumentsContract.buildDocumentUriUsingTree(tree, dirId), mime, name) } catch (e: Exception) { null }
     }
+
+    /** Deletes a folder only if it (and every subfolder) is completely empty. Never deletes a folder that still holds files. */
+    fun removeEmptyTree(cr: ContentResolver, tree: Uri, docId: String): Boolean {
+        val r = FolderLister.list(cr, tree, docId)
+        if (r.error != null) return false
+        var remaining = r.items.size
+        for (i in r.items) { if (i.isDir && removeEmptyTree(cr, tree, i.docId)) remaining-- }
+        return if (remaining == 0) runCatching { DocumentsContract.deleteDocument(cr, DocumentsContract.buildDocumentUriUsingTree(tree, docId)) }.getOrDefault(false) else false
+    }
 }

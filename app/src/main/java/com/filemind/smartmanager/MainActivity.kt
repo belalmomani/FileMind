@@ -29,6 +29,7 @@ sealed interface Screen {
     data object Timeline : Screen
     data object Similar : Screen
     data object Compare : Screen
+    data object Browser : Screen
     data class Files(val key: String, val title: String, val category: Category?, val filter: FileFilter?, val folder: String? = null, val custom: ((com.filemind.smartmanager.core.FileEntry, Long) -> Boolean)? = null) : Screen
 }
 
@@ -60,7 +61,7 @@ class MainActivity : ComponentActivity() {
                                 },
                                 openQuery = { text, f -> push(Screen.Files("ASK_$text", "نتيجة: $text", null, f)) },
                                 openFolders = { push(Screen.Folders) }, openOps = { push(Screen.Ops) }, openSettings = { push(Screen.Settings) },
-                                openStorage = { push(Screen.Storage) }, openOrganizer = { push(Screen.Organizer) }, openDuplicates = { push(Screen.Duplicates) }, openArchives = { push(Screen.Archives) }, openTimeline = { push(Screen.Timeline) }, openCompare = { push(Screen.Compare) })
+                                openStorage = { push(Screen.Storage) }, openOrganizer = { push(Screen.Organizer) }, openDuplicates = { push(Screen.Duplicates) }, openArchives = { push(Screen.Archives) }, openTimeline = { push(Screen.Timeline) }, openCompare = { push(Screen.Compare) }, openBrowser = { push(Screen.Browser) })
                             Screen.Folders -> FoldersScreen(vm, onOpen = { p -> push(Screen.Files("FOLDER_$p", p, null, FileFilter(folderContains = p), p)) }, onBack = ::pop)
                             Screen.Ops -> OperationsScreen(vm, ::pop)
                             Screen.Settings -> SettingsScreen(vm, mode, ::pop)
@@ -69,6 +70,7 @@ class MainActivity : ComponentActivity() {
                             Screen.Duplicates -> DuplicatesScreen(vm, ::pop, openSimilar = { push(Screen.Similar) })
                             Screen.Similar -> SimilarImagesScreen(vm, ::pop)
                             Screen.Compare -> CompareScreen(vm, ::pop)
+                            Screen.Browser -> BrowserScreen(vm, ::pop)
                             Screen.Archives -> ArchivesScreen(vm, ::pop)
                             Screen.Timeline -> TimelineScreen(vm, openMonth = { t, pred -> push(Screen.Files("TL_$t", t, null, null, custom = pred)) }, onBack = ::pop)
                             is Screen.Files -> FileListScreen(vm, s.title, s.key,

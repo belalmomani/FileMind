@@ -38,12 +38,14 @@ private fun mediaPermissions(): Array<String> =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (String, FileFilter) -> Unit, openFolders: () -> Unit, openOps: () -> Unit, openSettings: () -> Unit, openStorage: () -> Unit, openOrganizer: () -> Unit, openDuplicates: () -> Unit, openArchives: () -> Unit, openTimeline: () -> Unit, openCompare: () -> Unit) {
+fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (String, FileFilter) -> Unit, openFolders: () -> Unit, openOps: () -> Unit, openSettings: () -> Unit, openStorage: () -> Unit, openOrganizer: () -> Unit, openDuplicates: () -> Unit, openArchives: () -> Unit, openTimeline: () -> Unit, openCompare: () -> Unit, openBrowser: () -> Unit) {
     val ctx = LocalContext.current
     val files by vm.files.collectAsState()
     val scanning by vm.scanning.collectAsState()
     val failed by vm.failedFolders.collectAsState()
     val roots by vm.roots.collectAsState()
+    val pending by vm.pendingOps.collectAsState()
+    val running by vm.opProgress.collectAsState()
     val now = remember(files) { System.currentTimeMillis() }
     val reviewMonths by vm.reviewMonths.collectAsState()
     var granted by remember { mutableStateOf(mediaPermissions().all { ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED }) }
@@ -100,6 +102,13 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
             Text("لعرض الصور والفيديو والصوتيات في التصنيفات نحتاج إذن قراءة الوسائط. لن تُرفع ملفاتك لأي خادم.")
             TextButton({ showRationale = true }) { Text("منح الإذن") }
         } }
+        running?.let { Text("جارٍ التنفيذ: $it ملف", color = MaterialTheme.colorScheme.primary) }
+        if (running == null) pending.forEach { p ->
+            Card { Column(Modifier.padding(12.dp)) {
+                Text("عملية غير مكتملة: بقي ${p.remaining} ملف")
+                Row { TextButton({ vm.resumeOp(p.opId) }) { Text("استكمال") }; TextButton({ vm.discardOp(p.opId) }) { Text("تجاهل") } }
+            } }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button({ treeLauncher.launch(null) }) { Text("إضافة مجلد / بطاقة SD") }
             OutlinedButton({ vm.rescan() }) { Text(if (scanning) "جارٍ الفحص…" else "إعادة الفحص") }
@@ -120,6 +129,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(openTimeline) { Text("آلة الزمن") }
             OutlinedButton(openCompare) { Text("مقارنة / مفقود") }
+            OutlinedButton(openBrowser) { Text("المتصفح") }
         }
         LazyVerticalGrid(GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(Category.entries.toList()) { c ->

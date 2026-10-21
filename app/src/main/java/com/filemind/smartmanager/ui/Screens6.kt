@@ -40,6 +40,11 @@ fun CompareScreen(vm: AppViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val res by vm.compareResult.collectAsState()
     val busy by vm.compareBusy.collectAsState()
+    val msg by vm.message.collectAsState()
+    val snaps by vm.snapshots.collectAsState()
+    var showSnaps by remember { mutableStateOf(false) }
+    var showSaveSnap by remember { mutableStateOf(false) }
+    var snapName by remember { mutableStateOf("") }
     var missingMode by remember { mutableStateOf(false) }
     var a by remember { mutableStateOf<SourceRef?>(null) }
     var b by remember { mutableStateOf<SourceRef?>(null) }
@@ -67,16 +72,22 @@ fun CompareScreen(vm: AppViewModel, onBack: () -> Unit) {
             }
             Text(if (missingMode) "المصدر الأول = المرجع، والثاني = الحالي." else "قارن محتوى مصدرين (مجلدين أو أرشيفين أو مزيجاً).", style = MaterialTheme.typography.bodySmall)
             Text(if (missingMode) "المرجع: ${a?.label ?: "—"}" else "الأول: ${a?.label ?: "—"}")
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton({ fa.launch(null) }) { Text("مجلد") }; OutlinedButton({ za.launch(zipMimes) }) { Text("أرشيف ZIP") } }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton({ fa.launch(null) }) { Text("مجلد") }; OutlinedButton({ za.launch(zipMimes) }) { Text("أرشيف ZIP") }; OutlinedButton({ showSnaps = true }) { Text("مرجع محفوظ") } }
+            if (a != null && a?.snapshotId == null) OutlinedButton({ showSaveSnap = true }, enabled = !busy) { Text("حفظ الأول كمرجع محلي") }
             Text(if (missingMode) "الحالي: ${b?.label ?: "—"}" else "الثاني: ${b?.label ?: "—"}")
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton({ fb.launch(null) }) { Text("مجلد") }; OutlinedButton({ zb.launch(zipMimes) }) { Text("أرشيف ZIP") } }
             Button({ vm.runCompare(a!!, b!!) }, enabled = a != null && b != null && !busy) { Text(if (busy) "جارٍ المقارنة…" else "ابدأ") }
             Text("RAR و7Z غير مدعومين. المجلدات الكبيرة قد تستغرق وقتاً لأن المحتوى يُقارن ببصمة SHA-256.", style = MaterialTheme.typography.bodySmall)
             // TODO: merge plan for several archives (conflict-aware) — comparison only for now.
             res?.note?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            msg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             if (res != null && rows.isEmpty() && res?.note == null) Text("لا توجد ملفات في المصدرين.")
             if (rows.isNotEmpty()) {
                 Text("النتيجة: " + CompareStatus.entries.joinToString(" · ") { "${statusLabel(it, missingMode)}: ${counts[it] ?: 0}" }, style = MaterialTheme.typography.bodySmall)
+                if (!missingMode) Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) {
+                    Text("خطة الدمج المقترحة (معاينة فقط — لا تنفيذ)", style = MaterialTheme.typography.titleSmall)
+                    Text("ملفات فريدة تُدمج: ${(counts[CompareStatus.ONLY_A] ?: 0) + (counts[CompareStatus.ONLY_B] ?: 0) + (counts[CompareStatus.IDENTICAL] ?: 0)} (المتطابقة تُحفظ مرة واحدة) · تعارضات تحتاج قرارك: ${counts[CompareStatus.DIFFERENT] ?: 0} · لن تُدمج لتعذر فحصها: ${counts[CompareStatus.UNREADABLE] ?: 0}", style = MaterialTheme.typography.bodySmall)
+                } }
                 androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(CompareStatus.entries.toList()) { st -> FilterChip(st in show, { show = if (st in show) show - st else show + st }, { Text(statusLabel(st, missingMode)) }) }
                 }
@@ -90,6 +101,27 @@ fun CompareScreen(vm: AppViewModel, onBack: () -> Unit) {
             }
         }
     }
+    if (showSnaps) AlertDialog(
+        onDismissRequest = { showSnaps = false }, title = { Text("المراجع المحفوظة") },
+        text = {
+            Column {
+                if (snaps.isEmpty()) Text("لا توجد مراجع محفوظة بعد.")
+                snaps.forEach { sn ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton({ a = SourceRef(Uri.EMPTY, false, "مرجع: ${sn.name}", sn.id); showSnaps = false }, Modifier.weight(1f)) { Text("${sn.name} · ${fmtDate(sn.createdMs)}") }
+                        TextButton({ vm.deleteSnapshot(sn) }) { Text("حذف") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton({ showSnaps = false }) { Text("إغلاق") } },
+    )
+    if (showSaveSnap) AlertDialog(
+        onDismissRequest = { showSaveSnap = false }, title = { Text("اسم المرجع") },
+        text = { OutlinedTextField(snapName, { snapName = it }, singleLine = true) },
+        confirmButton = { TextButton({ if (snapName.isNotBlank() && a != null) { vm.saveSnapshot(a!!, snapName.trim()); snapName = ""; showSnaps = false; showSaveSnap = false } }) { Text("حفظ") } },
+        dismissButton = { TextButton({ showSaveSnap = false }) { Text("إلغاء") } },
+    )
 }
 
 /** Interactive squarified treemap of the largest folders (by real scanned size). Tap a block for details. */

@@ -14,6 +14,7 @@ app/src/main/java/com/filemind/smartmanager/core/DuplicateFinder.kt
 app/src/main/java/com/filemind/smartmanager/core/FileFilter.kt
 app/src/main/java/com/filemind/smartmanager/core/FileTransfer.kt
 app/src/main/java/com/filemind/smartmanager/core/FileType.kt
+app/src/main/java/com/filemind/smartmanager/core/FolderGuard.kt
 app/src/main/java/com/filemind/smartmanager/core/OrganizeRuleJson.kt
 app/src/main/java/com/filemind/smartmanager/core/Organizer.kt
 app/src/main/java/com/filemind/smartmanager/core/PerceptualHash.kt
@@ -21,6 +22,7 @@ app/src/main/java/com/filemind/smartmanager/core/SourceComparer.kt
 app/src/main/java/com/filemind/smartmanager/core/Timeline.kt
 app/src/main/java/com/filemind/smartmanager/core/Treemap.kt
 app/src/main/java/com/filemind/smartmanager/core/ZipLab.kt
+app/src/main/java/com/filemind/smartmanager/data/FolderLister.kt
 app/src/main/java/com/filemind/smartmanager/data/ImageHasher.kt
 app/src/main/java/com/filemind/smartmanager/data/RelScanner.kt
 app/src/main/java/com/filemind/smartmanager/data/SafOps.kt
@@ -38,6 +40,7 @@ app/src/main/java/com/filemind/smartmanager/ui/Screens3.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens4.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens5.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens6.kt
+app/src/main/java/com/filemind/smartmanager/ui/Screens7.kt
 app/src/main/java/com/filemind/smartmanager/ui/Theme.kt
 app/src/main/res/mipmap-hdpi/ic_launcher.png
 app/src/main/res/mipmap-hdpi/ic_launcher_round.png
@@ -55,12 +58,15 @@ app/src/test/java/com/filemind/smartmanager/core/ArchiveAndTaskTest.kt
 app/src/test/java/com/filemind/smartmanager/core/CompareTreemapTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FileTransferTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FilterTest.kt
+app/src/test/java/com/filemind/smartmanager/core/FolderGuardTest.kt
 app/src/test/java/com/filemind/smartmanager/core/LogicTest.kt
 app/src/test/java/com/filemind/smartmanager/core/PerceptualHashTest.kt
 app/src/test/java/com/filemind/smartmanager/core/TimelineTest.kt
 build.gradle.kts
 docs/KNOWN_LIMITATIONS.md
 docs/PERMISSIONS.md
+docs/PLAY_CHECKLIST.md
+docs/PRIVACY_POLICY.md
 docs/store/play_icon_512.png
 gradle.properties
 keystore.properties.example
