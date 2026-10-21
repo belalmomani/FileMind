@@ -51,6 +51,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             dedupeAcrossSources(acc) to fail
         }
         files.value = all; failedFolders.value = failed; scanning.value = false
+        if (failed.isEmpty()) withContext(Dispatchers.IO) {
+            runCatching {
+                db.index().replaceAll(all.map { IndexedFile(it.path, it.name, it.size, it.modifiedMs, it.exifDateMs, it.parent) })
+                settings.setIndexTime(System.currentTimeMillis())
+            }
+        }
+    }
+
+    val indexTime = settings.indexTime.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    init {
+        // Show the cached index instantly; Home triggers a fresh rescan right away, and the cache is never treated as truth.
+        viewModelScope.launch {
+            val cached = withContext(Dispatchers.IO) { runCatching { db.index().all() }.getOrDefault(emptyList()) }
+            if (cached.isNotEmpty() && files.value.isEmpty()) files.value = cached.map { FileEntry(it.path, it.name, it.size, it.modifiedMs, it.exifDateMs, parent = it.parent) }
+        }
+    }
+
+    fun clearIndexAndRescan() = viewModelScope.launch {
+        withContext(Dispatchers.IO) { runCatching { db.index().clear(); settings.setIndexTime(0) } }
+        files.value = emptyList(); rescan()
     }
 
     fun addRoot(uri: Uri) = viewModelScope.launch { settings.addRoot(uri.toString()); rescan() }
@@ -101,9 +122,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val label = when (op.kind) { "MOVE" -> "نقل"; "COPY" -> "نسخ"; else -> "تنظيم" }
         val tree = Uri.parse(op.destTree)
         val stats = IntArray(3) // done, skipped, failed
+        val backup = settings.backupOnReplace.first()
         withContext(Dispatchers.IO) {
             val cr = getApplication<Application>().contentResolver
-            val t = SafTransfer(getApplication(), ::ask)
+            val t = SafTransfer(getApplication(), ::ask, backup)
             outer@ for ((dir, group) in items.groupBy { it.destDir }) {
                 val folderId = try { SafOps.ensureFolder(cr, tree, dir.split('/').filter { it.isNotBlank() }) }
                 catch (e: Exception) {

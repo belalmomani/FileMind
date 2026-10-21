@@ -99,6 +99,19 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
         else if (!i.isDir) open(i)
     }
 
+    val askDelete by vm.settings.confirmDelete.collectAsState(initial = true)
+    fun doDelete(list: List<BItem>) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                list.forEach { i ->
+                    val ok = runCatching { DocumentsContract.deleteDocument(cr, Uri.parse(i.uri)) }.getOrDefault(false)
+                    vm.logOp("حذف", i.name, "", i.uri, "", ok, if (!ok) "تعذر الحذف" else null)
+                }
+            }
+            selected.clear(); reload++; vm.rescan()
+        }
+    }
+
     val addRoot = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             runCatching { cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
@@ -127,7 +140,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
                     TextButton({ dialog = "info" }) { Text("معلومات") }
                     TextButton({ val i = sel[0]; scope.launch { vm.settings.toggleFavorite(favKey(cur.tree, i.docId, i.name, i.isDir)) } }) { Text("★") }
                 }
-                TextButton({ dialog = "delete" }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+                TextButton({ if (askDelete || sel.any { it.isDir }) dialog = "delete" else doDelete(sel.toList()) }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
             }
         },
     ) { pad ->
@@ -239,18 +252,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
     if (dialog == "delete" && sel.isNotEmpty()) AlertDialog(
         onDismissRequest = { dialog = "" }, title = { Text("حذف ${sel.size} عنصر؟") },
         text = { Text(if (sel.any { it.isDir }) "ستُحذف محتويات المجلدات المحددة أيضاً. لا تراجع من داخل التطبيق." else "لا تراجع عن الحذف من داخل التطبيق.") },
-        confirmButton = { TextButton({
-            val list = sel.toList(); dialog = ""
-            scope.launch {
-                withContext(Dispatchers.IO) {
-                    list.forEach { i ->
-                        val ok = runCatching { DocumentsContract.deleteDocument(cr, Uri.parse(i.uri)) }.getOrDefault(false)
-                        vm.logOp("حذف", i.name, "", i.uri, "", ok, if (!ok) "تعذر الحذف" else null)
-                    }
-                }
-                selected.clear(); reload++; vm.rescan()
-            }
-        }) { Text("حذف") } },
+        confirmButton = { TextButton({ val list = sel.toList(); dialog = ""; doDelete(list) }) { Text("حذف") } },
         dismissButton = { TextButton({ dialog = "" }) { Text("إلغاء") } },
     )
 }

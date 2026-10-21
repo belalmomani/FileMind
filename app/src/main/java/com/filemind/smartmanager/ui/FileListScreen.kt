@@ -46,6 +46,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
     val visible = remember(all, filter) { filter.apply(all.filter { base(it, now) }) }
     val selected: SnapshotStateList<String> = remember { mutableStateListOf() }
     val selEntries = visible.filter { it.path in selected }
+    val askBeforeDelete by vm.settings.confirmDelete.collectAsState(initial = true)
     var confirmDelete by remember { mutableStateOf(false) }
     var pendingMove by remember { mutableStateOf(true) }
     var showRename by remember { mutableStateOf(false) }
@@ -112,7 +113,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
                 TextButton({ pendingMove = false; destPicker.launch(null) }) { Text("نسخ") }
                 TextButton({ pendingMove = true; destPicker.launch(null) }) { Text("نقل") }
                 TextButton({ showRename = true }) { Text("تسمية") }
-                TextButton({ confirmDelete = true }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+                TextButton({ if (askBeforeDelete) confirmDelete = true else performDelete(selEntries) }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
             }
         },
     ) { pad ->

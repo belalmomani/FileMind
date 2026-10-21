@@ -29,6 +29,9 @@ data class PendingItem(
     val destDir: String, val done: Boolean = false,
 )
 
+@Entity(tableName = "indexed_file")
+data class IndexedFile(@PrimaryKey val path: String, val name: String, val size: Long, val modifiedMs: Long?, val exifDateMs: Long?, val parent: String)
+
 data class RemainingRow(val opId: Long, val remaining: Int)
 
 /** Locally stored reference set (path, size, SHA-256) used to detect missing/changed files later. */
@@ -71,6 +74,15 @@ interface PendingDao {
     @Query("SELECT opId AS opId, COUNT(*) AS remaining FROM pending_item WHERE done = 0 GROUP BY opId") fun remainingByOp(): Flow<List<RemainingRow>>
 }
 
+/** Local file index: a CACHE of the last scan (never treated as truth; every launch rescans). */
+@Dao
+abstract class IndexDao {
+    @Query("SELECT * FROM indexed_file") abstract suspend fun all(): List<IndexedFile>
+    @Query("DELETE FROM indexed_file") abstract suspend fun clear()
+    @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun insertAll(l: List<IndexedFile>)
+    @Transaction open suspend fun replaceAll(l: List<IndexedFile>) { clear(); l.chunked(500).forEach { insertAll(it) } }
+}
+
 @Dao
 interface SnapshotDao {
     @Insert suspend fun put(s: SnapshotEntity): Long
@@ -80,8 +92,8 @@ interface SnapshotDao {
 }
 
 @Database(
-    entities = [OperationLog::class, SavedFilterEntity::class, SavedTaskEntity::class, PendingOp::class, PendingItem::class, SnapshotEntity::class],
-    version = 2, exportSchema = false,
+    entities = [OperationLog::class, SavedFilterEntity::class, SavedTaskEntity::class, PendingOp::class, PendingItem::class, SnapshotEntity::class, IndexedFile::class],
+    version = 3, exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun logs(): LogDao
@@ -89,6 +101,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun tasks(): TaskDao
     abstract fun pending(): PendingDao
     abstract fun snapshots(): SnapshotDao
+    abstract fun index(): IndexDao
     companion object {
         @Volatile private var inst: AppDatabase? = null
         fun get(ctx: Context): AppDatabase = inst ?: synchronized(this) {

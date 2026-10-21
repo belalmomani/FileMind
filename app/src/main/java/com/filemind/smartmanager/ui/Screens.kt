@@ -48,6 +48,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     val running by vm.opProgress.collectAsState()
     val now = remember(files) { System.currentTimeMillis() }
     val reviewMonths by vm.reviewMonths.collectAsState()
+    val indexTime by vm.indexTime.collectAsState()
     var granted by remember { mutableStateOf(mediaPermissions().all { ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED }) }
     var showRationale by remember { mutableStateOf(false) }
     var ask by remember { mutableStateOf("") }
@@ -114,6 +115,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
             OutlinedButton({ vm.rescan() }) { Text(if (scanning) "جارٍ الفحص…" else "إعادة الفحص") }
         }
         Text("${files.size} ملف · ${fmtSize(totalSize)} · ${roots.size} مجلد مضاف" + if (failed.isNotEmpty()) " · تعذر فحص ${failed.size} مجلد" else "", style = MaterialTheme.typography.bodySmall)
+        indexTime?.let { Text("الفهرس المحلي (نسخة مخبأة قد تكون قديمة) محدّث: ${fmtDate(it)}" + if (scanning) " — جارٍ التحديث…" else "", style = MaterialTheme.typography.bodySmall) }
         if (failed.isNotEmpty()) Text("المجلدات التي تعذر فحصها غير محسوبة (لا تُعتبر فارغة).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(openFolders) { Text("المجلدات") }
@@ -201,6 +203,7 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
     val roots by vm.roots.collectAsState()
     val confirm by vm.settings.confirmDelete.collectAsState(initial = true)
     val retention by vm.settings.logRetentionDays.collectAsState(initial = 0)
+    val backup by vm.settings.backupOnReplace.collectAsState(initial = false)
     val reviewMonths by vm.reviewMonths.collectAsState()
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { TextButton(onBack) { Text("رجوع") }; Text("المظهر", style = MaterialTheme.typography.titleMedium) }
@@ -212,7 +215,13 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
         }
         item { Text("المجلدات المضافة", style = MaterialTheme.typography.titleMedium) }
         items(roots.toList()) { r -> Row(verticalAlignment = Alignment.CenterVertically) { Text(r, Modifier.weight(1f), maxLines = 1); TextButton({ vm.removeRoot(r) }) { Text("إزالة") } } }
-        item { Row(verticalAlignment = Alignment.CenterVertically) { Switch(confirm, { scope.launch { vm.settings.setConfirmDelete(it) } }); Text("  تأكيد قبل الحذف (الحذف يُؤكَّد دائماً حالياً)") } }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) { Switch(confirm, { scope.launch { vm.settings.setConfirmDelete(it) } }); Text("  تأكيد قبل حذف الملفات") }
+            Text("إيقافه يحذف الملفات المحددة مباشرة. حذف المجلدات يُؤكَّد دائماً.", style = MaterialTheme.typography.bodySmall)
+            Row(verticalAlignment = Alignment.CenterVertically) { Switch(backup, { scope.launch { vm.settings.setBackupOnReplace(it) } }); Text("  نسخة احتياطية عند الاستبدال") }
+            Text("عند التفعيل يُعاد تسمية الملف القديم إلى «.filemind-backup» بدل حذفه.", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton({ vm.clearIndexAndRescan() }) { Text("مسح الفهرس المحلي وإعادة الفحص") }
+        }
         item {
             Text("فترة «تحتاج مراجعة»", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

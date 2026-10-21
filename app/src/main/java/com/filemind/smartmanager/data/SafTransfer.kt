@@ -24,7 +24,7 @@ private data class Existing(val uri: Uri, val size: Long, val modified: Long?)
  * Copy/move into a SAF folder. Replace = write temp doc → verify size+SHA-256 → delete old → rename temp.
  * NOT atomic (SAF gives no guarantee). If the final rename fails, the new copy is kept under a temp name — no data is lost.
  */
-class SafTransfer(ctx: Context, private val ask: suspend (UiConflict) -> ConflictDecision) {
+class SafTransfer(ctx: Context, private val ask: suspend (UiConflict) -> ConflictDecision, private val backupOnReplace: Boolean = false) {
     private val cr = ctx.contentResolver
 
     suspend fun run(sources: List<FileEntry>, destTree: Uri, move: Boolean): List<OpResult> =
@@ -99,12 +99,18 @@ class SafTransfer(ctx: Context, private val ask: suspend (UiConflict) -> Conflic
             if (sizeOf(doc) != s.size || sha(doc) != sha(src)) throw IOException("فشل التحقق من الملف المكتوب")
             var finalUri = doc
             if (existing != null) {
-                oldDeleted = deleteAny(existing.uri)
-                if (!oldDeleted) throw IOException("تعذر حذف الملف القديم؛ لم يتم الاستبدال")
+                if (backupOnReplace) {
+                    // Old file is renamed aside (not deleted); if that fails nothing is replaced.
+                    DocumentsContract.renameDocument(cr, existing.uri, "${s.name}.filemind-backup") ?: throw IOException("تعذر حفظ نسخة احتياطية؛ لم يتم الاستبدال")
+                    oldDeleted = true
+                } else {
+                    oldDeleted = deleteAny(existing.uri)
+                    if (!oldDeleted) throw IOException("تعذر حذف الملف القديم؛ لم يتم الاستبدال")
+                }
                 finalUri = DocumentsContract.renameDocument(cr, doc, s.name)
                     ?: return OpResult(s, TransferStatus.FAILED, "اكتمل التحقق لكن تعذرت إعادة التسمية؛ النسخة الجديدة محفوظة باسم مؤقت", doc.toString())
             }
-            val note = if (move && !deleteAny(src)) "تم النسخ لكن تعذر حذف المصدر" else if (existing != null) "تم الاستبدال" else null
+            val note = if (move && !deleteAny(src)) "تم النسخ لكن تعذر حذف المصدر" else if (existing != null) "تم الاستبدال" + (if (backupOnReplace) " (القديم محفوظ باسم .filemind-backup)" else "") else null
             OpResult(s, TransferStatus.DONE, note, finalUri.toString())
         } catch (e: Exception) {
             if (tmpDoc != null && !oldDeleted) deleteAny(tmpDoc) // old file untouched
