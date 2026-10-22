@@ -1,4 +1,5 @@
 .github/workflows/build.yml
+.github/workflows/release.yml
 .gitignore
 LICENSE.TODO
 README.md
@@ -72,6 +73,7 @@ docs/KNOWN_LIMITATIONS.md
 docs/PERMISSIONS.md
 docs/PLAY_CHECKLIST.md
 docs/PRIVACY_POLICY.md
+docs/RELEASE.md
 docs/store/play_icon_512.png
 gradle.properties
 keystore.properties.example

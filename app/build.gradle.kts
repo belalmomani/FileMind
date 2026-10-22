@@ -26,8 +26,9 @@ android {
         applicationId = "com.filemind.smartmanager"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // Overridable from CI: -PappVersionCode=N -PappVersionName=X.Y.Z (release workflow). Defaults keep local builds unchanged.
+        versionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (findProperty("appVersionName") as String?) ?: "1.0.0"
         // Start.io App ID: put startio.appId=... in local.properties. Empty => ads disabled.
         // Start.io App ID is not a secret (it ships inside the app). Order: local.properties > env > project default. Empty value disables ads.
         val startioId = local.getProperty("startio.appId") ?: System.getenv("STARTIO_APP_ID") ?: "209933420"

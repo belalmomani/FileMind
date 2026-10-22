@@ -39,3 +39,4 @@
 - [ ] Start.io: أعلن في Data Safety عن «Device or other IDs» (معرّف الإعلان) والإعلانات، وأضف رابط سياسة Start.io. أكّد أن تطبيقك مضاف ومفعّل في portal.start.io وأضف ملف app-ads.txt إن طُلب.
 - [ ] جرّب نسخة release على جهاز حقيقي: لا تعرض إعلانات تجريبية في نسخ المتجر، ولا إعلان أثناء عمليات الملفات.
 - [ ] Play Console ← App content ← Foreground service permissions: صرّح باستخدام نوع dataSync (نقل/نسخ ملفات يطلبه المستخدم) وأرفق فيديو قصيراً يُظهر الميزة إن طُلب.
+- [ ] خطوات بناء الـ AAB الموقّع من GitHub: `docs/RELEASE.md`.
