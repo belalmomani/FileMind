@@ -54,6 +54,32 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     var ask by remember { mutableStateOf("") }
     var askMsg by remember { mutableStateOf<String?>(null) }
     val gridCols by vm.settings.gridColumns.collectAsState(initial = 0)
+    // Removable volumes (USB OTG / SD card) detected through StorageManager; access still needs the user's folder grant (SAF).
+    val storageManager = remember { ctx.getSystemService(android.content.Context.STORAGE_SERVICE) as android.os.storage.StorageManager }
+    var volumeTick by remember { mutableStateOf(0) }
+    DisposableEffect(Unit) {
+        val receiver = object : android.content.BroadcastReceiver() { override fun onReceive(c: android.content.Context?, i: Intent?) { volumeTick++ } }
+        val filter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_MEDIA_MOUNTED); addAction(Intent.ACTION_MEDIA_UNMOUNTED); addAction(Intent.ACTION_MEDIA_REMOVED); addAction(Intent.ACTION_MEDIA_EJECT)
+            addDataScheme("file")
+        }
+        ContextCompat.registerReceiver(ctx, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        onDispose { runCatching { ctx.unregisterReceiver(receiver) } }
+    }
+    val newVolumes = remember(volumeTick, roots, scanning) {
+        runCatching {
+            storageManager.storageVolumes.filter { v ->
+                v.isRemovable && v.state == android.os.Environment.MEDIA_MOUNTED && v.uuid != null && roots.none { r -> r.contains(v.uuid!!, ignoreCase = true) }
+            }
+        }.getOrDefault(emptyList())
+    }
+    val volumeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val uri = r.data?.data
+        if (r.resultCode == android.app.Activity.RESULT_OK && uri != null) {
+            runCatching { ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+            vm.addRoot(uri)
+        }
+    }
     val bgRunning by com.filemind.smartmanager.data.BackgroundOps.running.collectAsState()
     var bgAfterPermission by remember { mutableStateOf<Long?>(null) }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -115,6 +141,15 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
             Text("لعرض الصور والفيديو والصوتيات في التصنيفات نحتاج إذن قراءة الوسائط. لن تُرفع ملفاتك لأي خادم.")
             TextButton({ showRationale = true }) { Text("منح الإذن") }
         } }
+        if (running == null) newVolumes.forEach { v ->
+            Card { Column(Modifier.padding(12.dp)) {
+                Text("تم اكتشاف وحدة تخزين خارجية: ${v.getDescription(ctx)}")
+                Text("لا يُقرأ أي ملف قبل أن تمنح الوصول بنفسك وتختار المجلد.", style = MaterialTheme.typography.bodySmall)
+                TextButton({
+                    if (android.os.Build.VERSION.SDK_INT >= 29) volumeLauncher.launch(v.createOpenDocumentTreeIntent()) else treeLauncher.launch(null)
+                }) { Text("منح الوصول وإضافتها") }
+            } }
+        }
         running?.let { Row(verticalAlignment = Alignment.CenterVertically) { Text("جارٍ التنفيذ: $it ملف", Modifier.weight(1f), color = MaterialTheme.colorScheme.primary); TextButton({ vm.stopOp() }) { Text("إيقاف") } } }
         if (running == null) pending.forEach { p ->
             Card { Column(Modifier.padding(12.dp)) {
