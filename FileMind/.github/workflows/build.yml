@@ -1,0 +1,39 @@
+name: build
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify project layout
+        run: |
+          echo "--- repo tree (depth 3)"
+          find . -maxdepth 3 -not -path './.git*' | sort | head -200
+          echo "--- kotlin files under app: $(find app -name '*.kt' 2>/dev/null | wc -l)"
+          MISSING=""
+          for f in settings.gradle.kts build.gradle.kts app/build.gradle.kts app/src/main/AndroidManifest.xml; do
+            if [ -f "$f" ]; then echo "OK       $f"; else echo "MISSING  $f"; MISSING=1; fi
+          done
+          if [ -f docs/FILES.txt ]; then
+            echo "--- checking every expected file from docs/FILES.txt"
+            while IFS= read -r p; do [ -z "$p" ] || [ -f "$p" ] || { echo "MISSING  $p"; MISSING=1; }; done < docs/FILES.txt
+          fi
+          if [ -n "$MISSING" ]; then echo "::error::Project files are missing or in the wrong folder (see MISSING lines above)"; exit 1; fi
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      # Android SDK is preinstalled on ubuntu-latest runners (ANDROID_HOME); no setup-android action needed.
+      - name: Accept SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: 8.9 }
+      - name: Unit tests
+        run: gradle :app:testDebugUnitTest --stacktrace
+      - name: Debug APK
+        run: gradle :app:assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: filemind-results
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/reports/tests/
