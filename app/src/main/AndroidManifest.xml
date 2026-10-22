@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Media read access (Android 13+) — used for categories/search over images, video, audio. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -10,6 +11,10 @@
     <!-- Voice commands use the system speech recognizer via intent: no RECORD_AUDIO needed. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Background resume of file operations (WorkManager foreground service, type dataSync). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- MANAGE_EXTERNAL_STORAGE intentionally NOT declared: see docs/PERMISSIONS.md -->
 
     <application
@@ -21,6 +26,8 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <!-- Crash reports are OFF until the user enables them in Settings. -->
         <meta-data android:name="firebase_crashlytics_collection_enabled" android:value="false" />
+        <service android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync" tools:node="merge" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

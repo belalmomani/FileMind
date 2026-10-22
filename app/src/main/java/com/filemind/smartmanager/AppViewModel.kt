@@ -113,19 +113,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Cooperative stop: finishes the current file, leaves the rest pending so it can be resumed. */
     fun stopOp() { stopRequested = true; message.value = "جارٍ الإيقاف بعد الملف الحالي…" }
 
-    private fun PendingItem.toEntry() = FileEntry(path, name, size, modifiedMs, parent = parent)
-
     private suspend fun createOp(kind: String, destTree: Uri, items: List<Pair<FileEntry, String>>): Long {
         val id = db.pending().insertOp(PendingOp(kind = kind, destTree = destTree.toString(), createdMs = System.currentTimeMillis()))
         db.pending().insertItems(items.map { (e, dir) -> PendingItem(opId = id, path = e.path, name = e.name, size = e.size, modifiedMs = e.modifiedMs, parent = e.parent, destDir = dir) })
         return id
-    }
-
-    private suspend fun recordResult(opId: Long, label: String, r: OpResult) {
-        if (r.status == TransferStatus.CANCELLED) return
-        db.pending().markDone(opId, r.entry.path)
-        db.logs().insert(OperationLog(type = label, timeMs = System.currentTimeMillis(), oldName = r.entry.name, newName = r.entry.name,
-            oldPath = r.entry.path, newPath = r.newPath, size = r.entry.size, status = r.status.name, reason = r.reason))
     }
 
     private suspend fun executePending(opId: Long) {
@@ -135,33 +126,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         applyAll = null; stopRequested = false; AdsManager.fileOperationInProgress = true
         var done = total - items.size
         opProgress.value = "$done/$total"; message.value = null
-        val label = when (op.kind) { "MOVE" -> "نقل"; "COPY" -> "نسخ"; else -> "تنظيم" }
-        val tree = Uri.parse(op.destTree)
-        val stats = IntArray(3) // done, skipped, failed
         val backup = settings.backupOnReplace.first()
-        withContext(Dispatchers.IO) {
-            val cr = getApplication<Application>().contentResolver
-            val t = SafTransfer(getApplication(), ::ask, backup)
-            outer@ for ((dir, group) in items.groupBy { it.destDir }) {
-                if (stopRequested) break@outer
-                val folderId = try { SafOps.ensureFolder(cr, tree, dir.split('/').filter { it.isNotBlank() }) }
-                catch (e: Exception) {
-                    for (g in group) { recordResult(opId, label, OpResult(g.toEntry(), TransferStatus.FAILED, e.message, "")); stats[2]++; done++; opProgress.value = "$done/$total" }
-                    continue@outer
-                }
-                val results = t.runInDir(group.map { it.toEntry() }, tree, folderId, op.kind != "COPY", shouldStop = { stopRequested }) { r ->
-                    recordResult(opId, label, r)
-                    when (r.status) {
-                        TransferStatus.DONE -> stats[0]++
-                        TransferStatus.SKIPPED -> stats[1]++
-                        TransferStatus.FAILED -> stats[2]++
-                        TransferStatus.CANCELLED -> {}
-                    }
-                    if (r.status != TransferStatus.CANCELLED) { done++; opProgress.value = "$done/$total" }
-                }
-                if (results.any { it.status == TransferStatus.CANCELLED }) break@outer
+        BackgroundOps.uiRunning = true
+        val stats = try {
+            withContext(Dispatchers.IO) {
+                PendingRunner.run(getApplication(), db, opId, backup, ::ask, { stopRequested }) { d, t -> opProgress.value = "$d/$t" }
             }
-        }
+        } finally { BackgroundOps.uiRunning = false }
         val remaining = db.pending().remaining(opId).size
         if (remaining == 0) { db.pending().deleteItems(opId); db.pending().deleteOp(opId) }
         AdsManager.fileOperationInProgress = false; opProgress.value = null
@@ -194,7 +165,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         onDone()
     }
 
-    fun resumeOp(id: Long) = viewModelScope.launch { executePending(id) }
+    fun resumeOp(id: Long) = viewModelScope.launch { if (BackgroundOps.running.value) message.value = "تعمل عملية في الخلفية الآن؛ انتظر انتهاءها أو أوقفها من الإشعار" else executePending(id) }
     fun discardOp(id: Long) = viewModelScope.launch { db.pending().deleteItems(id); db.pending().deleteOp(id) }
 
     /** Logs the outcome of a delete performed by the UI layer (MediaStore delete request or SAF delete). */

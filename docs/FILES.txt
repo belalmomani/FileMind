@@ -25,7 +25,9 @@ app/src/main/java/com/filemind/smartmanager/core/Treemap.kt
 app/src/main/java/com/filemind/smartmanager/core/ZipLab.kt
 app/src/main/java/com/filemind/smartmanager/data/FolderLister.kt
 app/src/main/java/com/filemind/smartmanager/data/ImageHasher.kt
+app/src/main/java/com/filemind/smartmanager/data/PendingRunner.kt
 app/src/main/java/com/filemind/smartmanager/data/RelScanner.kt
+app/src/main/java/com/filemind/smartmanager/data/ResumeOpsWorker.kt
 app/src/main/java/com/filemind/smartmanager/data/SafOps.kt
 app/src/main/java/com/filemind/smartmanager/data/SafTransfer.kt
 app/src/main/java/com/filemind/smartmanager/data/Scanners.kt

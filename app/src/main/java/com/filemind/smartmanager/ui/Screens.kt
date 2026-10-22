@@ -53,6 +53,17 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     var showRationale by remember { mutableStateOf(false) }
     var ask by remember { mutableStateOf("") }
     var askMsg by remember { mutableStateOf<String?>(null) }
+    val bgRunning by com.filemind.smartmanager.data.BackgroundOps.running.collectAsState()
+    var bgAfterPermission by remember { mutableStateOf<Long?>(null) }
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        // Background work runs even if the notification permission is refused.
+        bgAfterPermission?.let { com.filemind.smartmanager.data.ResumeOpsWorker.enqueue(ctx, it) }; bgAfterPermission = null
+    }
+    fun startBackground(id: Long) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            bgAfterPermission = id; notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else com.filemind.smartmanager.data.ResumeOpsWorker.enqueue(ctx, id)
+    }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         granted = r.values.all { it }; vm.rescan()
@@ -107,7 +118,12 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
         if (running == null) pending.forEach { p ->
             Card { Column(Modifier.padding(12.dp)) {
                 Text("عملية غير مكتملة: بقي ${p.remaining} ملف")
-                Row { TextButton({ vm.resumeOp(p.opId) }) { Text("استكمال") }; TextButton({ vm.discardOp(p.opId) }) { Text("تجاهل") } }
+                Row {
+                    TextButton({ vm.resumeOp(p.opId) }, enabled = !bgRunning) { Text("استكمال") }
+                    TextButton({ startBackground(p.opId) }, enabled = !bgRunning) { Text("في الخلفية") }
+                    TextButton({ vm.discardOp(p.opId) }, enabled = !bgRunning) { Text("تجاهل") }
+                }
+                if (bgRunning) Text("تعمل عملية في الخلفية؛ التعارضات فيها تُترك دون استبدال (القديم يبقى) وتُسجَّل كمتجاوَزة. يمكن إيقافها من الإشعار.", style = MaterialTheme.typography.bodySmall)
             } }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
