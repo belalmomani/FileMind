@@ -27,6 +27,8 @@ class SettingsRepository(private val ctx: Context) {
     private val retentionKey = intPreferencesKey("log_retention_days")
     private val confirmDeleteKey = booleanPreferencesKey("confirm_delete")
     private val crashKey = booleanPreferencesKey("crash_reports")
+    private val iconSizeKey = intPreferencesKey("icon_size_dp")
+    private val gridColsKey = intPreferencesKey("grid_columns")
 
     val themeMode = ctx.store.data.map { p -> p[themeKey]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM }
     val roots = ctx.store.data.map { it[rootsKey] ?: emptySet() }
@@ -38,6 +40,8 @@ class SettingsRepository(private val ctx: Context) {
     val reviewMonths = ctx.store.data.map { it[reviewKey] ?: 6 }
     val logRetentionDays = ctx.store.data.map { it[retentionKey] ?: 0 }   // 0 = keep forever
     val confirmDelete = ctx.store.data.map { it[confirmDeleteKey] ?: true }
+    val iconSize = ctx.store.data.map { it[iconSizeKey] ?: 40 }          // base icon size (dp): 32 / 40 / 56
+    val gridColumns = ctx.store.data.map { it[gridColsKey] ?: 0 }        // 0 = automatic
     val crashReports = ctx.store.data.map { it[crashKey] ?: false }   // opt-in: default OFF
 
     suspend fun setTheme(m: ThemeMode) { ctx.store.edit { it[themeKey] = m.name } }
@@ -51,6 +55,8 @@ class SettingsRepository(private val ctx: Context) {
     suspend fun setReviewMonths(m: Int) { ctx.store.edit { it[reviewKey] = m } }
     suspend fun setLogRetention(days: Int) { ctx.store.edit { it[retentionKey] = days } }
     suspend fun setConfirmDelete(v: Boolean) { ctx.store.edit { it[confirmDeleteKey] = v } }
+    suspend fun setIconSize(dp: Int) { ctx.store.edit { it[iconSizeKey] = dp } }
+    suspend fun setGridColumns(n: Int) { ctx.store.edit { it[gridColsKey] = n } }
     suspend fun setCrashReports(v: Boolean) { ctx.store.edit { it[crashKey] = v } }
     // TODO: per-section view mode, review period (6 months default), log retention days.
 }

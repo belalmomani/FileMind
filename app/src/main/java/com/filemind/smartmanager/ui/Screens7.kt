@@ -56,6 +56,8 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
     val msg by vm.message.collectAsState()
     val favs by vm.settings.favorites.collectAsState(initial = emptySet())
     val viewMode by vm.settings.browserView.collectAsState(initial = ViewMode.LIST)
+    val iconDp by vm.settings.iconSize.collectAsState(initial = 40)
+    val gridCols by vm.settings.gridColumns.collectAsState(initial = 0)
     val showHidden by vm.settings.browserShowHidden.collectAsState(initial = false)
 
     var stack by remember { mutableStateOf(listOf<Loc>()) }
@@ -188,11 +190,11 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
                 result == null -> Text("جارٍ التحميل…", Modifier.padding(16.dp))
                 result?.error != null -> Text(result?.error.orEmpty(), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
                 shownItems.isEmpty() -> Text(if (result?.items.orEmpty().isEmpty()) "المجلد فارغ" else "لا عناصر ظاهرة (المخفية غير معروضة).", Modifier.padding(16.dp))
-                viewMode == ViewMode.GRID -> LazyVerticalGrid(GridCells.Adaptive(100.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                viewMode == ViewMode.GRID -> LazyVerticalGrid(if (gridCols > 0) GridCells.Fixed(gridCols) else GridCells.Adaptive((iconDp * 2.5f).dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     gridItems(shownItems, key = { it.docId }) { i ->
                         Column(Modifier.clip(RoundedCornerShape(10.dp)).background(if (i.docId in selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent)
                             .combinedClickable(onClick = { click(i) }, onLongClick = { toggle(i) }).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            ItemIcon(i, byParent, 56)
+                            ItemIcon(i, byParent, (iconDp * 1.4f).toInt())
                             Text(i.name, maxLines = 2, style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -202,7 +204,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
                         Row(Modifier.fillMaxWidth().background(if (i.docId in selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
                             .combinedClickable(onClick = { click(i) }, onLongClick = { toggle(i) }).padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            ItemIcon(i, byParent, 40)
+                            ItemIcon(i, byParent, iconDp)
                             Column(Modifier.weight(1f)) {
                                 Text((if (favs.contains(favKey(cur.tree, i.docId, i.name, i.isDir))) "★ " else "") + i.name, maxLines = 1)
                                 if (viewMode == ViewMode.DETAILS) Text(listOf(if (i.isDir) "مجلد" else (i.ext ?: "بلا امتداد"), if (i.isDir) "" else fmtSize(i.size), fmtDate(i.modified)).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)

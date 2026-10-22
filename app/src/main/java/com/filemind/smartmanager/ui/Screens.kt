@@ -53,6 +53,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     var showRationale by remember { mutableStateOf(false) }
     var ask by remember { mutableStateOf("") }
     var askMsg by remember { mutableStateOf<String?>(null) }
+    val gridCols by vm.settings.gridColumns.collectAsState(initial = 0)
     val bgRunning by com.filemind.smartmanager.data.BackgroundOps.running.collectAsState()
     var bgAfterPermission by remember { mutableStateOf<Long?>(null) }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -149,7 +150,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
             OutlinedButton(openCompare) { Text("مقارنة / مفقود") }
             OutlinedButton(openBrowser) { Text("المتصفح") }
         }
-        LazyVerticalGrid(GridCells.Fixed(2), Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyVerticalGrid(GridCells.Fixed(if (gridCols > 0) gridCols else 2), Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(Category.entries.toList()) { c ->
                 Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(c.argb).copy(alpha = 0.85f)).clickable { openCategory(c) }.padding(12.dp).fillMaxWidth()) {
                     Text(if (c == Category.STALE) "تحتاج مراجعة — منذ $reviewMonths أشهر" else c.titleAr, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2)
@@ -224,6 +225,8 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
     val backup by vm.settings.backupOnReplace.collectAsState(initial = false)
     val reviewMonths by vm.reviewMonths.collectAsState()
     val crash by vm.crashReports.collectAsState()
+    val iconSize by vm.settings.iconSize.collectAsState(initial = 40)
+    val gridColumns by vm.settings.gridColumns.collectAsState(initial = 0)
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { TextButton(onBack) { Text("رجوع") }; Text("المظهر", style = MaterialTheme.typography.titleMedium) }
         items(ThemeMode.entries.toList()) { m ->
@@ -240,6 +243,17 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) { Switch(backup, { scope.launch { vm.settings.setBackupOnReplace(it) } }); Text("  نسخة احتياطية عند الاستبدال") }
             Text("عند التفعيل يُعاد تسمية الملف القديم إلى «.filemind-backup» بدل حذفه.", style = MaterialTheme.typography.bodySmall)
             OutlinedButton({ vm.clearIndexAndRescan() }) { Text("مسح الفهرس المحلي وإعادة الفحص") }
+        }
+        item {
+            Text("حجم الأيقونات", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(32 to "صغير", 40 to "متوسط", 56 to "كبير").forEach { (d, label) -> FilterChip(iconSize == d, { scope.launch { vm.settings.setIconSize(d) } }, { Text(label) }) }
+            }
+            Text("عدد الأعمدة في الشبكات", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(0 to "تلقائي", 2 to "2", 3 to "3", 4 to "4").forEach { (n, label) -> FilterChip(gridColumns == n, { scope.launch { vm.settings.setGridColumns(n) } }, { Text(label) }) }
+            }
+            Text("يؤثر على المتصفح (القائمة والشبكة) وعلى تصنيفات الشاشة الرئيسية.", style = MaterialTheme.typography.bodySmall)
         }
         item {
             Text("فترة «تحتاج مراجعة»", style = MaterialTheme.typography.titleMedium)
