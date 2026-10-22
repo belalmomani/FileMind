@@ -30,10 +30,14 @@ class SafTransfer(ctx: Context, private val ask: suspend (UiConflict) -> Conflic
     suspend fun run(sources: List<FileEntry>, destTree: Uri, move: Boolean): List<OpResult> =
         runInDir(sources, destTree, DocumentsContract.getTreeDocumentId(destTree), move)
 
-    suspend fun runInDir(sources: List<FileEntry>, destTree: Uri, destId: String, move: Boolean, onResult: suspend (OpResult) -> Unit = {}): List<OpResult> {
+    suspend fun runInDir(sources: List<FileEntry>, destTree: Uri, destId: String, move: Boolean, shouldStop: () -> Boolean = { false }, onResult: suspend (OpResult) -> Unit = {}): List<OpResult> {
         val destDir = DocumentsContract.buildDocumentUriUsingTree(destTree, destId)
         val out = ArrayList<OpResult>()
         for ((i, s) in sources.withIndex()) {
+            if (shouldStop()) {
+                sources.drop(i).forEach { out += OpResult(it, TransferStatus.CANCELLED, "أُوقفت العملية", "") }
+                break
+            }
             val r = one(s, destTree, destId, destDir, move)
             out += r
             onResult(r)

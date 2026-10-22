@@ -13,6 +13,8 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -118,7 +120,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
         },
     ) { pad ->
         Column(Modifier.padding(pad)) {
-            FilterBar(filter, { filter = it }, onReset = { filter = FileFilter(); vm.resetFilter(key) })
+            FilterBar(vm, filter, { filter = it }, onReset = { filter = FileFilter(); vm.resetFilter(key) })
             val d = filter.describe()
             if (d.isNotEmpty()) Text("الشروط: " + d.joinToString(" · "), Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
             msg?.let { Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.primary) }
@@ -156,8 +158,12 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FilterBar(f: FileFilter, set: (FileFilter) -> Unit, onReset: () -> Unit) {
+private fun FilterBar(vm: AppViewModel, f: FileFilter, set: (FileFilter) -> Unit, onReset: () -> Unit) {
     val now = remember { System.currentTimeMillis() }
+    var showSave by remember { mutableStateOf(false) }
+    var showList by remember { mutableStateOf(false) }
+    var fname by remember { mutableStateOf("") }
+    val named by vm.namedFilters.collectAsState()
     Column(Modifier.padding(horizontal = 12.dp)) {
         OutlinedTextField(f.query, { set(f.copy(query = it)) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("بحث بالاسم") })
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -169,7 +175,33 @@ private fun FilterBar(f: FileFilter, set: (FileFilter) -> Unit, onReset: () -> U
             item { FilterChip(true, { set(f.copy(combine = if (f.combine == Combine.AND) Combine.OR else Combine.AND)) }, { Text(if (f.combine == Combine.AND) "الشروط: AND" else "الشروط: OR") }) }
             item { FilterChip(true, { set(f.copy(sortBy = SortBy.entries[(f.sortBy.ordinal + 1) % SortBy.entries.size])) }, { Text("فرز: " + when (f.sortBy) { SortBy.NAME -> "الاسم"; SortBy.SIZE -> "الحجم"; SortBy.MODIFIED -> "التاريخ" }) }) }
             item { FilterChip(true, { set(f.copy(descending = !f.descending)) }, { Text(if (f.descending) "↓ تنازلي" else "↑ تصاعدي") }) }
+            item { FilterChip(f.dateSource == DateSource.EXIF, { set(f.copy(dateSource = if (f.dateSource == DateSource.EXIF) DateSource.MODIFIED else DateSource.EXIF)) }, { Text("تاريخ الالتقاط (EXIF)") }) }
+            item { AssistChip({ showSave = true }, { Text("حفظ الفلتر") }) }
+            item { AssistChip({ showList = true }, { Text("الفلاتر المحفوظة") }) }
             item { AssistChip(onReset, { Text("إعادة ضبط") }) }
         }
+        OutlinedTextField(f.folderContains, { set(f.copy(folderContains = it)) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("المجلد أو المصدر يحتوي…") })
+        if (showSave) AlertDialog(
+            onDismissRequest = { showSave = false }, title = { Text("اسم الفلتر (نفس الاسم يستبدل المحفوظ)") },
+            text = { OutlinedTextField(fname, { fname = it }, singleLine = true) },
+            confirmButton = { TextButton({ if (fname.isNotBlank()) { vm.saveNamedFilter(fname.trim(), f); fname = ""; showSave = false } }) { Text("حفظ") } },
+            dismissButton = { TextButton({ showSave = false }) { Text("إلغاء") } },
+        )
+        if (showList) AlertDialog(
+            onDismissRequest = { showList = false }, title = { Text("الفلاتر المحفوظة") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    if (named.isEmpty()) Text("لا توجد فلاتر محفوظة.")
+                    named.forEach { n ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton({ set(FileFilter.fromJson(n.json)); showList = false }, Modifier.weight(1f)) { Text(n.name) }
+                            TextButton({ vm.saveNamedFilter(n.name + " (نسخة)", FileFilter.fromJson(n.json)) }) { Text("نسخ") }
+                            TextButton({ vm.deleteNamedFilter(n) }) { Text("حذف") }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton({ showList = false }) { Text("إغلاق") } },
+        )
     }
 }

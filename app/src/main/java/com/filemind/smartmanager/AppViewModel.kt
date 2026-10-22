@@ -81,6 +81,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveFilter(key: String, f: FileFilter) = viewModelScope.launch { db.filters().put(SavedFilterEntity(key, key, f.toJson())) }
     fun resetFilter(key: String) = viewModelScope.launch { db.filters().reset(key) }
 
+    val namedFilters = db.namedFilters().all().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    /** Same name overwrites = edit. */
+    fun saveNamedFilter(name: String, f: FileFilter) = viewModelScope.launch { db.namedFilters().put(NamedFilter(name, f.toJson())) }
+    fun deleteNamedFilter(n: NamedFilter) = viewModelScope.launch { db.namedFilters().delete(n) }
+
     fun answerConflict(d: ConflictDecision, all: Boolean) { pending?.complete(d to all) }
 
     private suspend fun ask(c: UiConflict): ConflictDecision {
@@ -96,6 +101,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Journaled bulk operations: every item is stored first, marked done one by one, resumable after interruption ----
     val pendingOps = db.pending().remainingByOp().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val opProgress = MutableStateFlow<String?>(null)
+    @Volatile private var stopRequested = false
+    /** Cooperative stop: finishes the current file, leaves the rest pending so it can be resumed. */
+    fun stopOp() { stopRequested = true; message.value = "جارٍ الإيقاف بعد الملف الحالي…" }
 
     private fun PendingItem.toEntry() = FileEntry(path, name, size, modifiedMs, parent = parent)
 
@@ -116,7 +124,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val op = db.pending().op(opId) ?: return
         val items = db.pending().remaining(opId)
         val total = db.pending().total(opId)
-        applyAll = null; AdsManager.fileOperationInProgress = true
+        applyAll = null; stopRequested = false; AdsManager.fileOperationInProgress = true
         var done = total - items.size
         opProgress.value = "$done/$total"; message.value = null
         val label = when (op.kind) { "MOVE" -> "نقل"; "COPY" -> "نسخ"; else -> "تنظيم" }
@@ -127,12 +135,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val cr = getApplication<Application>().contentResolver
             val t = SafTransfer(getApplication(), ::ask, backup)
             outer@ for ((dir, group) in items.groupBy { it.destDir }) {
+                if (stopRequested) break@outer
                 val folderId = try { SafOps.ensureFolder(cr, tree, dir.split('/').filter { it.isNotBlank() }) }
                 catch (e: Exception) {
                     for (g in group) { recordResult(opId, label, OpResult(g.toEntry(), TransferStatus.FAILED, e.message, "")); stats[2]++; done++; opProgress.value = "$done/$total" }
                     continue@outer
                 }
-                val results = t.runInDir(group.map { it.toEntry() }, tree, folderId, op.kind != "COPY") { r ->
+                val results = t.runInDir(group.map { it.toEntry() }, tree, folderId, op.kind != "COPY", shouldStop = { stopRequested }) { r ->
                     recordResult(opId, label, r)
                     when (r.status) {
                         TransferStatus.DONE -> stats[0]++
@@ -148,7 +157,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val remaining = db.pending().remaining(opId).size
         if (remaining == 0) { db.pending().deleteItems(opId); db.pending().deleteOp(opId) }
         AdsManager.fileOperationInProgress = false; opProgress.value = null
-        message.value = "اكتمل: ${stats[0]} ناجح، ${stats[1]} متجاوَز، ${stats[2]} فشل" + if (remaining > 0) " — بقي $remaining ملف (يمكن الاستكمال من الشاشة الرئيسية)" else ""
+        message.value = "اكتمل: ${stats[0]} ناجح، ${stats[1]} متجاوَز، ${stats[2]} فشل" + if (remaining > 0) " — بقي $remaining ملف (يمكن الاستكمال من الشاشة الرئيسية)" + (if (stopRequested) " — أُوقفت بطلبك" else "") else ""
         rescan()
     }
 
@@ -256,6 +265,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Saved organize tasks ----
     val tasks = db.tasks().all().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     fun saveTask(name: String, json: String) = viewModelScope.launch { db.tasks().put(SavedTaskEntity(name = name, json = json)) }
+    fun renameTask(t: SavedTaskEntity, name: String) = viewModelScope.launch { db.tasks().put(t.copy(name = name)) }
     fun deleteTask(t: SavedTaskEntity) = viewModelScope.launch { db.tasks().delete(t) }
 
     // ---- Archives (ZIP only) ----

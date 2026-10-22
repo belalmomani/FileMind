@@ -57,6 +57,7 @@ app/src/main/res/values/strings.xml
 app/src/test/java/com/filemind/smartmanager/core/ArchiveAndTaskTest.kt
 app/src/test/java/com/filemind/smartmanager/core/CompareTreemapTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FileTransferTest.kt
+app/src/test/java/com/filemind/smartmanager/core/FilterDateSourceTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FilterTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FolderGuardTest.kt
 app/src/test/java/com/filemind/smartmanager/core/LogicTest.kt

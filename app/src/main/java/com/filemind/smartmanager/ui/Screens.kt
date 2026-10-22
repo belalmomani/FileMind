@@ -103,7 +103,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
             Text("لعرض الصور والفيديو والصوتيات في التصنيفات نحتاج إذن قراءة الوسائط. لن تُرفع ملفاتك لأي خادم.")
             TextButton({ showRationale = true }) { Text("منح الإذن") }
         } }
-        running?.let { Text("جارٍ التنفيذ: $it ملف", color = MaterialTheme.colorScheme.primary) }
+        running?.let { Row(verticalAlignment = Alignment.CenterVertically) { Text("جارٍ التنفيذ: $it ملف", Modifier.weight(1f), color = MaterialTheme.colorScheme.primary); TextButton({ vm.stopOp() }) { Text("إيقاف") } } }
         if (running == null) pending.forEach { p ->
             Card { Column(Modifier.padding(12.dp)) {
                 Text("عملية غير مكتملة: بقي ${p.remaining} ملف")
@@ -173,11 +173,13 @@ fun FoldersScreen(vm: AppViewModel, onOpen: (String) -> Unit, onBack: () -> Unit
 fun OperationsScreen(vm: AppViewModel, onBack: () -> Unit) {
     val logs by vm.logs.collectAsState()
     val msg by vm.message.collectAsState()
+    val running by vm.opProgress.collectAsState()
     var q by remember { mutableStateOf("") }
     val shown = logs.filter { q.isBlank() || it.oldName.contains(q, true) || it.status.contains(q, true) || it.type.contains(q) }
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row { TextButton(onBack) { Text("رجوع") }; Spacer(Modifier.weight(1f)); TextButton({ vm.clearLog() }) { Text("مسح السجل") } }
         OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("بحث في السجل") })
+        running?.let { Row(verticalAlignment = Alignment.CenterVertically) { Text("عملية جارية: $it", Modifier.weight(1f)); TextButton({ vm.stopOp() }) { Text("إيقاف") } } }
         msg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         if (shown.isEmpty()) Text("لا توجد عمليات مسجلة بعد.", Modifier.padding(16.dp))
         // TODO: undo for operations where source/destination info allows; running/paused ops with resume (WorkManager).

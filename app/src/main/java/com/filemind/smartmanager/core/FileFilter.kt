@@ -25,8 +25,10 @@ data class FileFilter(
     val combine: Combine = Combine.AND,
     val sortBy: SortBy = SortBy.MODIFIED,
     val descending: Boolean = true,
+    val dateSource: DateSource = DateSource.MODIFIED,   // MODIFIED or EXIF: which date the date conditions use
 ) {
     private fun checks(e: FileEntry): List<Boolean> = buildList {
+        val d = Organizer.dateOf(e, dateSource)
         if (query.isNotBlank()) add(e.name.contains(query.trim(), ignoreCase = true))
         if (nameStartsWith.isNotBlank()) add(e.name.startsWith(nameStartsWith, ignoreCase = true))
         if (nameEndsWith.isNotBlank()) add(e.baseName.endsWith(nameEndsWith, ignoreCase = true))
@@ -34,9 +36,9 @@ data class FileFilter(
         if (extensions.isNotEmpty()) add(e.extension in extensions)
         minSize?.let { add(e.size >= it) }
         maxSize?.let { add(e.size <= it) }
-        modifiedBeforeMs?.let { add(e.modifiedMs != null && e.modifiedMs < it) }   // unknown date never matches
-        modifiedAfterMs?.let { add(e.modifiedMs != null && e.modifiedMs > it) }
-        year?.let { y -> add(e.modifiedMs != null && Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = e.modifiedMs }.get(Calendar.YEAR) == y) }
+        modifiedBeforeMs?.let { add(d != null && d < it) }   // unknown date never matches
+        modifiedAfterMs?.let { add(d != null && d > it) }
+        year?.let { y -> add(d != null && Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = d }.get(Calendar.YEAR) == y) }
         if (folderContains.isNotBlank()) add(e.parent.contains(folderContains.trim(), ignoreCase = true))
         if (onlyNoExtension) add(e.extension == null)
     }
@@ -68,7 +70,7 @@ data class FileFilter(
         minSize?.let { add("الحجم ≥ ${it / (1024 * 1024)} MB") }
         maxSize?.let { add("الحجم ≤ ${it / (1024 * 1024)} MB") }
         if (modifiedBeforeMs != null) add("معدّل قبل تاريخ محدد")
-        if (year != null) add("سنة التعديل $year")
+        if (year != null) add((if (dateSource == DateSource.EXIF) "سنة الالتقاط " else "سنة التعديل ") + year)
         if (folderContains.isNotBlank()) add("المجلد يحتوي «$folderContains»")
         if (onlyNoExtension) add("بدون امتداد")
         if (!includeHidden) add("إخفاء الملفات المخفية")
@@ -81,7 +83,7 @@ data class FileFilter(
         modifiedBeforeMs?.let { put("before", it) }; modifiedAfterMs?.let { put("after", it) }
         year?.let { put("year", it) }
         put("folder", folderContains); put("noext", onlyNoExtension); put("hidden", includeHidden)
-        put("combine", combine.name); put("sort", sortBy.name); put("desc", descending)
+        put("combine", combine.name); put("sort", sortBy.name); put("desc", descending); put("dsrc", dateSource.name)
     }.toString()
 
     companion object {
@@ -100,6 +102,7 @@ data class FileFilter(
                 combine = runCatching { Combine.valueOf(o.optString("combine")) }.getOrDefault(Combine.AND),
                 sortBy = runCatching { SortBy.valueOf(o.optString("sort")) }.getOrDefault(SortBy.MODIFIED),
                 descending = o.optBoolean("desc", true),
+                dateSource = runCatching { DateSource.valueOf(o.optString("dsrc")) }.getOrDefault(DateSource.MODIFIED),
             )
         } catch (e: Exception) { FileFilter() }
     }

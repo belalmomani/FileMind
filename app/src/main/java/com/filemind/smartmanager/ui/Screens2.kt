@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.filemind.smartmanager.AppViewModel
 import com.filemind.smartmanager.core.*
+import com.filemind.smartmanager.data.db.SavedTaskEntity
 
 private fun typeAr(t: FileType) = when (t) {
     FileType.IMAGE -> "صور"; FileType.VIDEO -> "فيديو"; FileType.AUDIO -> "صوتيات"; FileType.PDF -> "PDF وكتب"
@@ -172,6 +173,7 @@ fun OrganizerScreen(vm: AppViewModel, onBack: () -> Unit) {
     val tasks by vm.tasks.collectAsState()
     var showSave by remember { mutableStateOf(false) }
     var taskName by remember { mutableStateOf("") }
+    var renameTarget by remember { mutableStateOf<SavedTaskEntity?>(null) }
 
     val rule = OrganizeRule(types, primary, secondary, ds, destRoot = "", unknownDateFolder = if (unknownFolder) "تاريخ غير معروف" else null)
     val plan = remember(files, types, primary, secondary, ds, unknownFolder) { Organizer.plan(files, rule) }
@@ -217,6 +219,8 @@ fun OrganizerScreen(vm: AppViewModel, onBack: () -> Unit) {
                             unknownFolder = r.unknownDateFolder != null; dest = d?.let { Uri.parse(it) }
                         }
                     }, Modifier.weight(1f)) { Text(t.name) }
+                    TextButton({ vm.saveTask(t.name + " (نسخة)", t.json) }) { Text("نسخ") }
+                    TextButton({ renameTarget = t; taskName = t.name }) { Text("اسم") }
                     TextButton({ vm.deleteTask(t) }) { Text("حذف") }
                 }
             }
@@ -224,6 +228,14 @@ fun OrganizerScreen(vm: AppViewModel, onBack: () -> Unit) {
         items(plan.moves.groupBy { it.targetDir }.entries.take(40).toList()) { (dir, list) ->
             Text("${dir.trimStart('/')} ← ${list.size} ملف", style = MaterialTheme.typography.bodySmall)
         }
+    }
+    renameTarget?.let { t ->
+        AlertDialog(
+            onDismissRequest = { renameTarget = null }, title = { Text("إعادة تسمية المهمة") },
+            text = { OutlinedTextField(taskName, { taskName = it }, singleLine = true) },
+            confirmButton = { TextButton({ if (taskName.isNotBlank()) { vm.renameTask(t, taskName.trim()); taskName = ""; renameTarget = null } }) { Text("حفظ") } },
+            dismissButton = { TextButton({ renameTarget = null }) { Text("إلغاء") } },
+        )
     }
     if (showSave) AlertDialog(
         onDismissRequest = { showSave = false },

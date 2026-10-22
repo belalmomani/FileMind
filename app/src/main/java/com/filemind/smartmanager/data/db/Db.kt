@@ -38,6 +38,16 @@ data class RemainingRow(val opId: Long, val remaining: Int)
 @Entity(tableName = "snapshot")
 data class SnapshotEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val name: String, val createdMs: Long, val json: String)
 
+@Entity(tableName = "named_filter")
+data class NamedFilter(@PrimaryKey val name: String, val json: String)
+
+@Dao
+interface NamedFilterDao {
+    @Query("SELECT * FROM named_filter ORDER BY name") fun all(): Flow<List<NamedFilter>>
+    @Upsert suspend fun put(n: NamedFilter)
+    @Delete suspend fun delete(n: NamedFilter)
+}
+
 @Dao
 interface LogDao {
     @Insert suspend fun insert(l: OperationLog)
@@ -92,8 +102,8 @@ interface SnapshotDao {
 }
 
 @Database(
-    entities = [OperationLog::class, SavedFilterEntity::class, SavedTaskEntity::class, PendingOp::class, PendingItem::class, SnapshotEntity::class, IndexedFile::class],
-    version = 3, exportSchema = false,
+    entities = [OperationLog::class, SavedFilterEntity::class, SavedTaskEntity::class, PendingOp::class, PendingItem::class, SnapshotEntity::class, IndexedFile::class, NamedFilter::class],
+    version = 4, exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun logs(): LogDao
@@ -102,6 +112,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun pending(): PendingDao
     abstract fun snapshots(): SnapshotDao
     abstract fun index(): IndexDao
+    abstract fun namedFilters(): NamedFilterDao
     companion object {
         @Volatile private var inst: AppDatabase? = null
         fun get(ctx: Context): AppDatabase = inst ?: synchronized(this) {
