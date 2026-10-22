@@ -49,6 +49,7 @@ fun CompareScreen(vm: AppViewModel, onBack: () -> Unit) {
     var a by remember { mutableStateOf<SourceRef?>(null) }
     var b by remember { mutableStateOf<SourceRef?>(null) }
     var show by remember { mutableStateOf(CompareStatus.entries.toSet()) }
+    var confirmCopyFromA by remember { mutableStateOf<Boolean?>(null) }
 
     fun folder(uri: Uri) = SourceRef(uri, false, DocumentsContract.getTreeDocumentId(uri))
     fun zip(uri: Uri) = SourceRef(uri, true, uri.lastPathSegment ?: "zip")
@@ -65,7 +66,7 @@ fun CompareScreen(vm: AppViewModel, onBack: () -> Unit) {
         item {
             TextButton(onBack) { Text("رجوع") }
             Text("مقارنة المصادر / كشف المفقود", style = MaterialTheme.typography.titleLarge)
-            Text("للقراءة فقط: لا يُحذف أو يُعدَّل أي ملف أو أرشيف.", style = MaterialTheme.typography.bodySmall)
+            Text("المقارنة للقراءة فقط. النسخ الاختياري لا يستبدل ولا يحذف أي ملف.", style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(!missingMode, { missingMode = false }, { Text("مقارنة") })
                 FilterChip(missingMode, { missingMode = true }, { Text("كشف المفقود") })
@@ -78,15 +79,22 @@ fun CompareScreen(vm: AppViewModel, onBack: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton({ fb.launch(null) }) { Text("مجلد") }; OutlinedButton({ zb.launch(zipMimes) }) { Text("أرشيف ZIP") } }
             Button({ vm.runCompare(a!!, b!!) }, enabled = a != null && b != null && !busy) { Text(if (busy) "جارٍ المقارنة…" else "ابدأ") }
             Text("RAR و7Z غير مدعومين. المجلدات الكبيرة قد تستغرق وقتاً لأن المحتوى يُقارن ببصمة SHA-256.", style = MaterialTheme.typography.bodySmall)
-            // TODO: merge plan for several archives (conflict-aware) — comparison only for now.
+            // TODO: merge plan for several archives (conflict-aware) — folders only for now.
             res?.note?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             msg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             if (res != null && rows.isEmpty() && res?.note == null) Text("لا توجد ملفات في المصدرين.")
             if (rows.isNotEmpty()) {
                 Text("النتيجة: " + CompareStatus.entries.joinToString(" · ") { "${statusLabel(it, missingMode)}: ${counts[it] ?: 0}" }, style = MaterialTheme.typography.bodySmall)
                 if (!missingMode) Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) {
-                    Text("خطة الدمج المقترحة (معاينة فقط — لا تنفيذ)", style = MaterialTheme.typography.titleSmall)
+                    Text("خطة الدمج المقترحة", style = MaterialTheme.typography.titleSmall)
                     Text("ملفات فريدة تُدمج: ${(counts[CompareStatus.ONLY_A] ?: 0) + (counts[CompareStatus.ONLY_B] ?: 0) + (counts[CompareStatus.IDENTICAL] ?: 0)} (المتطابقة تُحفظ مرة واحدة) · تعارضات تحتاج قرارك: ${counts[CompareStatus.DIFFERENT] ?: 0} · لن تُدمج لتعذر فحصها: ${counts[CompareStatus.UNREADABLE] ?: 0}", style = MaterialTheme.typography.bodySmall)
+                    val foldersOnly = a?.zip == false && a?.snapshotId == null && b?.zip == false && b?.snapshotId == null
+                    val onlyA = MergePlan.missing(rows, true).size; val onlyB = MergePlan.missing(rows, false).size
+                    if (foldersOnly) {
+                        Text("التنفيذ نسخ فقط للمفقود: لا استبدال ولا حذف، والمتعارضة لا تُمَس.", style = MaterialTheme.typography.bodySmall)
+                        if (onlyA > 0) OutlinedButton({ confirmCopyFromA = true }, enabled = !busy) { Text("انسخ $onlyA ملفاً من الأول إلى الثاني") }
+                        if (onlyB > 0) OutlinedButton({ confirmCopyFromA = false }, enabled = !busy) { Text("انسخ $onlyB ملفاً من الثاني إلى الأول") }
+                    } else Text("التنفيذ متاح بين مجلدين فقط؛ الأرشيفات والمراجع للمعاينة.", style = MaterialTheme.typography.bodySmall)
                 } }
                 androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(CompareStatus.entries.toList()) { st -> FilterChip(st in show, { show = if (st in show) show - st else show + st }, { Text(statusLabel(st, missingMode)) }) }
@@ -100,6 +108,15 @@ fun CompareScreen(vm: AppViewModel, onBack: () -> Unit) {
                 HorizontalDivider()
             }
         }
+    }
+    confirmCopyFromA?.let { fromA ->
+        val n = MergePlan.missing(rows, fromA).size
+        AlertDialog(
+            onDismissRequest = { confirmCopyFromA = null }, title = { Text("تأكيد النسخ") },
+            text = { Text("سيُنسخ $n ملفاً مفقوداً إلى ${if (fromA) "الثاني" else "الأول"} بالمسارات النسبية نفسها. لا يُستبدل أو يُحذف شيء. يحتاج المجلد الهدف إلى صلاحية كتابة، وقد يُطلب منك إعادة اختياره إن رُفض.") },
+            confirmButton = { TextButton({ confirmCopyFromA = null; vm.copyMissing(a!!, b!!, fromA) { vm.runCompare(a!!, b!!) } }) { Text("نسخ") } },
+            dismissButton = { TextButton({ confirmCopyFromA = null }) { Text("إلغاء") } },
+        )
     }
     if (showSnaps) AlertDialog(
         onDismissRequest = { showSnaps = false }, title = { Text("المراجع المحفوظة") },

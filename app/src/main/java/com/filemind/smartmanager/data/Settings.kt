@@ -26,6 +26,7 @@ class SettingsRepository(private val ctx: Context) {
     private val reviewKey = intPreferencesKey("review_months")
     private val retentionKey = intPreferencesKey("log_retention_days")
     private val confirmDeleteKey = booleanPreferencesKey("confirm_delete")
+    private val crashKey = booleanPreferencesKey("crash_reports")
 
     val themeMode = ctx.store.data.map { p -> p[themeKey]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM }
     val roots = ctx.store.data.map { it[rootsKey] ?: emptySet() }
@@ -37,6 +38,7 @@ class SettingsRepository(private val ctx: Context) {
     val reviewMonths = ctx.store.data.map { it[reviewKey] ?: 6 }
     val logRetentionDays = ctx.store.data.map { it[retentionKey] ?: 0 }   // 0 = keep forever
     val confirmDelete = ctx.store.data.map { it[confirmDeleteKey] ?: true }
+    val crashReports = ctx.store.data.map { it[crashKey] ?: false }   // opt-in: default OFF
 
     suspend fun setTheme(m: ThemeMode) { ctx.store.edit { it[themeKey] = m.name } }
     suspend fun addRoot(uri: String) { ctx.store.edit { it[rootsKey] = (it[rootsKey] ?: emptySet()) + uri } }
@@ -49,5 +51,6 @@ class SettingsRepository(private val ctx: Context) {
     suspend fun setReviewMonths(m: Int) { ctx.store.edit { it[reviewKey] = m } }
     suspend fun setLogRetention(days: Int) { ctx.store.edit { it[retentionKey] = days } }
     suspend fun setConfirmDelete(v: Boolean) { ctx.store.edit { it[confirmDeleteKey] = v } }
+    suspend fun setCrashReports(v: Boolean) { ctx.store.edit { it[crashKey] = v } }
     // TODO: per-section view mode, review period (6 months default), log retention days.
 }

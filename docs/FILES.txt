@@ -15,6 +15,7 @@ app/src/main/java/com/filemind/smartmanager/core/FileFilter.kt
 app/src/main/java/com/filemind/smartmanager/core/FileTransfer.kt
 app/src/main/java/com/filemind/smartmanager/core/FileType.kt
 app/src/main/java/com/filemind/smartmanager/core/FolderGuard.kt
+app/src/main/java/com/filemind/smartmanager/core/MergePlan.kt
 app/src/main/java/com/filemind/smartmanager/core/OrganizeRuleJson.kt
 app/src/main/java/com/filemind/smartmanager/core/Organizer.kt
 app/src/main/java/com/filemind/smartmanager/core/PerceptualHash.kt
@@ -61,6 +62,7 @@ app/src/test/java/com/filemind/smartmanager/core/FilterDateSourceTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FilterTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FolderGuardTest.kt
 app/src/test/java/com/filemind/smartmanager/core/LogicTest.kt
+app/src/test/java/com/filemind/smartmanager/core/MergePlanTest.kt
 app/src/test/java/com/filemind/smartmanager/core/PerceptualHashTest.kt
 app/src/test/java/com/filemind/smartmanager/core/TimelineTest.kt
 build.gradle.kts

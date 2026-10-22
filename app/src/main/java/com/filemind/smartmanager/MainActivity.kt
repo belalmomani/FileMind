@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
@@ -12,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import com.filemind.smartmanager.ads.AdsManager
+import com.filemind.smartmanager.ads.BottomAdBar
 import com.filemind.smartmanager.core.Category
 import com.filemind.smartmanager.core.FileFilter
 import com.filemind.smartmanager.data.ThemeMode
@@ -38,10 +41,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AdsManager.init()
+        AdsManager.init(this)
         setContent {
             val mode by vm.settings.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
             val conflict by vm.conflict.collectAsState()
+            val opRunning by vm.opProgress.collectAsState()
             val stack = remember { mutableStateListOf<Screen>(Screen.Home) }
             fun push(s: Screen) { stack.add(s) }
             fun pop() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
@@ -50,6 +54,8 @@ class MainActivity : ComponentActivity() {
             androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 FileMindTheme(mode) {
                     Surface(Modifier.fillMaxSize()) {
+                        Column(Modifier.fillMaxSize()) {
+                        Box(Modifier.weight(1f)) {
                         when (val s = stack.last()) {
                             Screen.Home -> HomeScreen(vm,
                                 openCategory = { c ->
@@ -75,6 +81,9 @@ class MainActivity : ComponentActivity() {
                             Screen.Timeline -> TimelineScreen(vm, openMonth = { t, pred -> push(Screen.Files("TL_$t", t, null, null, custom = pred)) }, onBack = ::pop)
                             is Screen.Files -> FileListScreen(vm, s.title, s.key,
                                 base = s.custom ?: s.category?.test ?: { _, _ -> true }, initial = s.filter, onBack = ::pop)
+                        }
+                        }
+                        BottomAdBar(hidden = opRunning != null)
                         }
                     }
                     conflict?.let { c -> ConflictDialog(c) { d, all -> vm.answerConflict(d, all) } }

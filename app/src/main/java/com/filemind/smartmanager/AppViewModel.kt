@@ -28,9 +28,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val message = MutableStateFlow<String?>(null)
     val conflict = MutableStateFlow<UiConflict?>(null)
     val logs = db.logs().all().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val crashReports = settings.crashReports.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    /** Crashlytics is opt-in. Safe when Firebase isn't configured (no google-services.json): the call is simply ignored. */
+    private fun applyCrashReports(on: Boolean) {
+        runCatching { com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(on) }
+    }
+    fun setCrashReports(on: Boolean) = viewModelScope.launch { settings.setCrashReports(on); applyCrashReports(on) }
+
     val roots = settings.roots.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     init {
+        viewModelScope.launch { applyCrashReports(settings.crashReports.first()) }
         // Log retention: delete old log rows only (never files).
         viewModelScope.launch {
             val d = settings.logRetentionDays.first()
@@ -386,6 +394,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return Loaded(files, failed, { f -> f.uri?.let { try { SafOps.sha256(cr, Uri.parse(it)) } catch (e: Exception) { null } } }, null)
     }
 
+
+    /** Copies files that exist on only one side into the other folder (same relative paths). Never overwrites or deletes; journaled/resumable like other bulk ops. */
+    fun copyMissing(a: SourceRef, b: SourceRef, fromA: Boolean, onDone: () -> Unit) = viewModelScope.launch {
+        val src = if (fromA) a else b; val dst = if (fromA) b else a
+        if (src.zip || dst.zip || src.snapshotId != null || dst.snapshotId != null) { message.value = "النسخ متاح بين مجلدين فقط (ليس أرشيفاً أو مرجعاً محفوظاً)"; return@launch }
+        if (FolderGuard.isSameOrInside(src.label, dst.label) || FolderGuard.isSameOrInside(dst.label, src.label)) { message.value = "لا يمكن الدمج بين مجلد ومجلد داخله"; return@launch }
+        val picked = MergePlan.missing(compareResult.value?.rows.orEmpty(), fromA)
+        val items = picked.mapNotNull { r ->
+            val f = (if (fromA) r.a else r.b) ?: return@mapNotNull null
+            val dir = MergePlan.dirOf(r.path)
+            FileEntry(f.uri ?: return@mapNotNull null, r.path.substringAfterLast('/'), f.size, f.modifiedMs, parent = dir) to dir
+        }
+        if (items.isEmpty()) { message.value = "لا توجد ملفات مفقودة للنسخ"; return@launch }
+        val id = createOp("COPY", dst.uri, items)
+        executePending(id); onDone()
+    }
 
     // ---- Saved reference sets (local snapshots) ----
     val snapshots = db.snapshots().all().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())

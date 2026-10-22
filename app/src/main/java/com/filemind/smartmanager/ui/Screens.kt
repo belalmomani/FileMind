@@ -133,7 +133,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
             OutlinedButton(openCompare) { Text("مقارنة / مفقود") }
             OutlinedButton(openBrowser) { Text("المتصفح") }
         }
-        LazyVerticalGrid(GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyVerticalGrid(GridCells.Fixed(2), Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(Category.entries.toList()) { c ->
                 Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(c.argb).copy(alpha = 0.85f)).clickable { openCategory(c) }.padding(12.dp).fillMaxWidth()) {
                     Text(if (c == Category.STALE) "تحتاج مراجعة — منذ $reviewMonths أشهر" else c.titleAr, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2)
@@ -207,6 +207,7 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
     val retention by vm.settings.logRetentionDays.collectAsState(initial = 0)
     val backup by vm.settings.backupOnReplace.collectAsState(initial = false)
     val reviewMonths by vm.reviewMonths.collectAsState()
+    val crash by vm.crashReports.collectAsState()
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { TextButton(onBack) { Text("رجوع") }; Text("المظهر", style = MaterialTheme.typography.titleMedium) }
         items(ThemeMode.entries.toList()) { m ->
@@ -244,6 +245,8 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
             Text("الخصوصية", style = MaterialTheme.typography.titleMedium)
             Text("الفهرسة والبحث والسجل تتم محلياً على جهازك. لا تُرفع أسماء الملفات أو محتوياتها. الإعلانات (إن فُعّلت) تعالجها مكتبة Start.io وفق سياستها.")
             Text("الأوامر الصوتية تستخدم خدمة التعرف الصوتي في نظام جهازك؛ قد يعالج الصوت (لا الملفات) عبر الإنترنت حسب الجهاز. لا تُنفَّذ أي عملية تغيّر الملفات من الصوت دون تأكيد.")
+            Row(verticalAlignment = Alignment.CenterVertically) { Switch(crash, { vm.setCrashReports(it) }); Text("  إرسال تقارير الأعطال (Firebase Crashlytics)") }
+            Text("معطّل افتراضياً. عند تفعيله تُرسل عند حدوث عطل معلومات تقنية فقط (نوع الجهاز والنظام وسجل العطل ومعرّف تثبيت)، دون أسماء ملفاتك أو محتوياتها.", style = MaterialTheme.typography.bodySmall)
             Text("حالة Start.io: " + if (AdsManager.isConfigured) "مهيّأ" else "غير مهيّأ (أضف startio.appId في local.properties)")
             Text("الإصدار ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             // TODO: indexing, voice, log retention, cloud, backup-before-replace settings.

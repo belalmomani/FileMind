@@ -1,3 +1,4 @@
 # copy to local.properties (never commit)
 sdk.dir=/path/to/Android/Sdk
+# Optional: defaults to the project App ID. Leave EMPTY to disable ads.
 startio.appId=

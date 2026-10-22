@@ -7,6 +7,12 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Firebase plugins are applied only when app/google-services.json exists, so a build without it still works (Crashlytics then stays inactive).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
+}
+
 fun props(name: String) = Properties().apply {
     val f = rootProject.file(name); if (f.exists()) f.inputStream().use { load(it) }
 }
@@ -23,7 +29,9 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         // Start.io App ID: put startio.appId=... in local.properties. Empty => ads disabled.
-        buildConfigField("String", "STARTIO_APP_ID", "\"${local.getProperty("startio.appId", "")}\"")
+        // Start.io App ID is not a secret (it ships inside the app). Order: local.properties > env > project default. Empty value disables ads.
+        val startioId = local.getProperty("startio.appId") ?: System.getenv("STARTIO_APP_ID") ?: "209933420"
+        buildConfigField("String", "STARTIO_APP_ID", "\"$startioId\"")
     }
     signingConfigs {
         if (signing.containsKey("storeFile")) create("release") {
@@ -60,8 +68,12 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    // TODO: add Start.io SDK dependency per official docs after verifying current version.
+    // Start.io SDK: dependency line exactly as in the official demo (StartApp-SDK/android-sdk-demo). Dynamic 5.+ per their docs; pin a version later if you want reproducible builds.
+    implementation("com.startapp:inapp-sdk:5.+")
     implementation("androidx.documentfile:documentfile:1.0.1")
+    // Crashlytics only (no Analytics). BoM controls versions.
+    implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
+    implementation("com.google.firebase:firebase-crashlytics")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }
