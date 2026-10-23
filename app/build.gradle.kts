@@ -69,8 +69,9 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    // Start.io SDK: dependency line exactly as in the official demo (StartApp-SDK/android-sdk-demo). Dynamic 5.+ per their docs; pin a version later if you want reproducible builds.
-    implementation("com.startapp:inapp-sdk:5.+")
+    // Start.io SDK pinned to 5.3.0: 5.4.0 (what "5.+" resolved to) failed checkDebugAarMetadata on our toolchain (compileSdk 35 / AGP 8.5.2).
+    // Move to a newer SDK only together with a compileSdk/AGP/Gradle upgrade.
+    implementation("com.startapp:inapp-sdk:5.3.0")
     implementation("androidx.documentfile:documentfile:1.0.1")
     // Crashlytics only (no Analytics). BoM controls versions.
     implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
