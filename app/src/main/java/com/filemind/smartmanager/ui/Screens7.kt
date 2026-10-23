@@ -11,6 +11,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -120,6 +122,12 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
             vm.addRoot(uri)
         }
     }
+    val zipDestPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null && cur != null) {
+            runCatching { cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+            vm.zipSelection(Uri.parse(cur.tree), sel.filter { !it.isDir }, sel.filter { it.isDir }, uri, textInput) { selected.clear(); reload++ }
+        }
+    }
     val destPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null && cur != null) {
             runCatching { cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
@@ -129,7 +137,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
 
     Scaffold(
         bottomBar = {
-            if (selected.isNotEmpty() && cur != null) BottomAppBar {
+            if (selected.isNotEmpty() && cur != null) BottomAppBar { Row(Modifier.horizontalScroll(rememberScrollState())) {
                 TextButton({
                     val list = sel.filter { !it.isDir }
                     val i = Intent(Intent.ACTION_SEND_MULTIPLE).setType("*/*").putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(list.map { Uri.parse(it.uri) })).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -137,13 +145,14 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }) { Text("مشاركة") }
                 TextButton({ pendingMove = false; destPicker.launch(null) }) { Text("نسخ") }
                 TextButton({ pendingMove = true; destPicker.launch(null) }) { Text("نقل") }
+                TextButton({ textInput = if (sel.size == 1) sel[0].name.substringBeforeLast('.', sel[0].name) + ".zip" else "archive.zip"; dialog = "zip" }) { Text("ضغط") }
                 if (sel.size == 1) {
                     TextButton({ textInput = sel[0].name; dialog = "rename" }) { Text("تسمية") }
                     TextButton({ dialog = "info" }) { Text("معلومات") }
                     TextButton({ val i = sel[0]; scope.launch { vm.settings.toggleFavorite(favKey(cur.tree, i.docId, i.name, i.isDir)) } }) { Text("★") }
                 }
                 TextButton({ if (askDelete || sel.any { it.isDir }) dialog = "delete" else doDelete(sel.toList()) }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
-            }
+            } }
         },
     ) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 12.dp)) {
@@ -230,6 +239,15 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
                 reload++
             }
         }) { Text("إنشاء") } },
+        dismissButton = { TextButton({ dialog = "" }) { Text("إلغاء") } },
+    )
+    if (dialog == "zip") AlertDialog(
+        onDismissRequest = { dialog = "" }, title = { Text("ضغط إلى ZIP") },
+        text = { Column {
+            OutlinedTextField(textInput, { textInput = it }, singleLine = true, label = { Text("اسم الأرشيف") })
+            Text("بعد التأكيد تختار مجلد الوجهة. يُنشأ ملف جديد دائماً ولا يُستبدل شيء، وتبقى الأصول كما هي.", style = MaterialTheme.typography.bodySmall)
+        } },
+        confirmButton = { TextButton({ dialog = ""; zipDestPicker.launch(null) }) { Text("اختيار الوجهة") } },
         dismissButton = { TextButton({ dialog = "" }) { Text("إلغاء") } },
     )
     if (dialog == "rename" && one != null) AlertDialog(

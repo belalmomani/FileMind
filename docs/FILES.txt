@@ -25,6 +25,7 @@ app/src/main/java/com/filemind/smartmanager/core/SourceComparer.kt
 app/src/main/java/com/filemind/smartmanager/core/Timeline.kt
 app/src/main/java/com/filemind/smartmanager/core/Treemap.kt
 app/src/main/java/com/filemind/smartmanager/core/ZipLab.kt
+app/src/main/java/com/filemind/smartmanager/core/ZipMaker.kt
 app/src/main/java/com/filemind/smartmanager/data/FolderLister.kt
 app/src/main/java/com/filemind/smartmanager/data/ImageHasher.kt
 app/src/main/java/com/filemind/smartmanager/data/PendingRunner.kt
@@ -69,6 +70,7 @@ app/src/test/java/com/filemind/smartmanager/core/LogicTest.kt
 app/src/test/java/com/filemind/smartmanager/core/MergePlanTest.kt
 app/src/test/java/com/filemind/smartmanager/core/PerceptualHashTest.kt
 app/src/test/java/com/filemind/smartmanager/core/TimelineTest.kt
+app/src/test/java/com/filemind/smartmanager/core/ZipMakerTest.kt
 build.gradle.kts
 docs/KNOWN_LIMITATIONS.md
 docs/PERMISSIONS.md

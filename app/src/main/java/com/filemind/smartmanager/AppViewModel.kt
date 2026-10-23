@@ -165,6 +165,60 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         onDone()
     }
 
+    /**
+     * Creates a NEW zip (never overwrites; name made unique) in [destTree] from the selected files/folders.
+     * All-or-nothing: any unreadable file, write failure, stop request or failed verification deletes the partial zip.
+     */
+    fun zipSelection(srcTree: Uri, files: List<BItem>, folders: List<BItem>, destTree: Uri, zipName: String, onDone: () -> Unit) = viewModelScope.launch {
+        if (BackgroundOps.running.value) { message.value = "تعمل عملية في الخلفية الآن؛ انتظر انتهاءها"; return@launch }
+        val cr = getApplication<Application>().contentResolver
+        val destRoot = android.provider.DocumentsContract.getTreeDocumentId(destTree)
+        message.value = "جارٍ تحليل المحدد…"
+        val walks = withContext(Dispatchers.IO) { folders.map { f -> FolderLister.walk(cr, srcTree, f.docId, f.name) } }
+        if (walks.sumOf { it.failed.size } > 0) { message.value = "تعذر قراءة مجلد داخل المحدد؛ أُلغي الضغط حفاظاً على الدقة"; return@launch }
+        class Src(val name: String, val item: BItem?)
+        val raw = ArrayList<Src>()
+        files.forEach { raw += Src(it.name, it) }
+        walks.forEach { w ->
+            w.emptyDirs.forEach { raw += Src("$it/", null) }
+            w.files.forEach { (b, rel) -> raw += Src("$rel/${b.name}", b) }
+        }
+        if (raw.isEmpty()) { message.value = "لا يوجد ما يُضغط"; return@launch }
+        val names = ZipMaker.uniqueNames(raw.map { it.name.replace('\\', '_') })
+        val entries = raw.mapIndexed { i, s ->
+            val b = s.item
+            ZipMaker.Entry(names[i], b == null, b?.modified) { b?.let { x -> cr.openInputStream(Uri.parse(x.uri)) } }
+        }
+        val total = entries.count { !it.isDir }
+        // New, unique file name at the destination root.
+        val base = zipName.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_").removeSuffix(".zip").ifBlank { "archive" }
+        var finalName = "$base.zip"; var k = 2
+        while (withContext(Dispatchers.IO) { SafOps.childExists(cr, destTree, destRoot, finalName) }) finalName = "$base ($k).zip".also { k++ }
+
+        stopRequested = false; AdsManager.fileOperationInProgress = true; BackgroundOps.uiRunning = true
+        opProgress.value = "0/$total"; message.value = null
+        var target: Uri? = null
+        val result = withContext(Dispatchers.IO) {
+            target = SafOps.createFile(cr, destTree, destRoot, finalName)
+            val t = target ?: return@withContext ZipMaker.Outcome(0, "تعذر إنشاء ملف الأرشيف في الوجهة (تحقق من صلاحية الكتابة)", false)
+            val os = (try { cr.openOutputStream(t, "w") } catch (e: Exception) { null })
+                ?: return@withContext ZipMaker.Outcome(0, "تعذر فتح الوجهة للكتابة", false)
+            os.buffered().use { ZipMaker.write(entries, it, { stopRequested }) { d, n -> opProgress.value = "$d/$n" } }
+        }
+        var ok = result.error == null && !result.stopped
+        var reason: String? = result.error ?: if (result.stopped) "أُوقف بطلبك" else null
+        if (ok) {
+            val listing = withContext(Dispatchers.IO) { runCatching { cr.openInputStream(target!!)?.use { ZipLab.list(it) } }.getOrNull() }
+            if (listing == null || listing.error != null || listing.items.size != entries.size) { ok = false; reason = "فشل التحقق من الأرشيف بعد إنشائه" }
+        }
+        if (!ok) target?.let { u -> withContext(Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(cr, u) } } }
+        db.logs().insert(OperationLog(type = "ضغط", timeMs = System.currentTimeMillis(), oldName = "$total ملف", newName = finalName, oldPath = srcTree.toString(),
+            newPath = if (ok) target.toString() else "", size = 0, status = if (ok) "DONE" else "FAILED", reason = reason))
+        AdsManager.fileOperationInProgress = false; BackgroundOps.uiRunning = false; opProgress.value = null
+        message.value = if (ok) "تم إنشاء $finalName ($total ملف) وتم التحقق منه" else "لم يُنشأ الأرشيف: $reason (لا يُترك ملف ناقص)"
+        rescan(); onDone()
+    }
+
     fun resumeOp(id: Long) = viewModelScope.launch { if (BackgroundOps.running.value) message.value = "تعمل عملية في الخلفية الآن؛ انتظر انتهاءها أو أوقفها من الإشعار" else executePending(id) }
     fun discardOp(id: Long) = viewModelScope.launch { db.pending().deleteItems(id); db.pending().deleteOp(id) }
 
