@@ -10,7 +10,7 @@ import java.util.zip.ZipInputStream
 data class ZipItem(val name: String, val size: Long, val isDir: Boolean)
 data class ArchiveState(val entry: FileEntry, val items: List<ZipItem>, val note: String?)
 
-/** ZIP only (java.util.zip). RAR/7Z are NOT supported: no licensed library is bundled. */
+/** ZIP only (java.util.zip). 7Z/RAR are listed read-only in data/ArchiveReaders.kt; extraction is ZIP-only. */
 object ZipLab {
     class Listing(val items: List<ZipItem>, val unsafeSkipped: Int, val error: String?)
 

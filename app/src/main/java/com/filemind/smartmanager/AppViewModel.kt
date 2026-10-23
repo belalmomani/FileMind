@@ -305,13 +305,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val archive = MutableStateFlow<ArchiveState?>(null)
 
     fun openArchive(e: FileEntry) = viewModelScope.launch {
-        if (e.extension != "zip") {
-            archive.value = ArchiveState(e, emptyList(), "تنسيق ${e.extension?.uppercase()} غير مدعوم حالياً: لا توجد مكتبة مرخّصة مضافة. تظهر معلومات الملف فقط.")
+        val ext = e.extension
+        if (ext != "zip" && ext != "7z" && ext != "rar") {
+            archive.value = ArchiveState(e, emptyList(), "صيغة ${ext?.uppercase()} غير مدعومة للقراءة. يمكنك فتحها بتطبيق آخر.")
             return@launch
         }
         val l = withContext(Dispatchers.IO) {
-            try { getApplication<Application>().contentResolver.openInputStream(Uri.parse(e.path))?.use { ZipLab.list(it) } ?: ZipLab.Listing(emptyList(), 0, "تعذر فتح الملف") }
-            catch (ex: Exception) { ZipLab.Listing(emptyList(), 0, "تعذر فتح الملف: ${ex.message}") }
+            val cr = getApplication<Application>().contentResolver
+            try {
+                when (ext) {
+                    "7z" -> ArchiveReaders.list7z(cr, Uri.parse(e.path))
+                    "rar" -> ArchiveReaders.listRar(cr, Uri.parse(e.path))
+                    else -> cr.openInputStream(Uri.parse(e.path))?.use { ZipLab.list(it) } ?: ZipLab.Listing(emptyList(), 0, "تعذر فتح الملف")
+                }
+            } catch (ex: Exception) { ZipLab.Listing(emptyList(), 0, "تعذر فتح الملف: ${ex.message}") }
         }
         archive.value = ArchiveState(e, l.items, listOfNotNull(l.error, if (l.unsafeSkipped > 0) "تم تجاهل ${l.unsafeSkipped} عنصراً بمسار غير آمن" else null).joinToString(" — ").ifEmpty { null })
     }

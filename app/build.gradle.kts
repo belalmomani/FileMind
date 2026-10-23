@@ -34,6 +34,13 @@ android {
         val startioId = local.getProperty("startio.appId") ?: System.getenv("STARTIO_APP_ID") ?: "209933420"
         buildConfigField("String", "STARTIO_APP_ID", "\"$startioId\"")
     }
+    packaging {
+        resources {
+            // Several Apache jars carry the same license/notice files; keep one. Multi-release folders are unused on Android.
+            pickFirsts += setOf("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES")
+            excludes += "META-INF/versions/**"
+        }
+    }
     signingConfigs {
         // Shared DEBUG key (public on purpose, NOT secret, never used for Play): CI would otherwise sign every debug build with a new random key,
         // and Android refuses to install a build over one signed with a different key.
@@ -78,6 +85,10 @@ dependencies {
     // Start.io SDK pinned to 5.3.0: 5.4.0 (what "5.+" resolved to) failed checkDebugAarMetadata on our toolchain (compileSdk 35 / AGP 8.5.2).
     // Move to a newer SDK only together with a compileSdk/AGP/Gradle upgrade.
     implementation("com.startapp:inapp-sdk:5.3.0")
+    // Read-only 7Z/RAR listing (plain JARs, not AARs). Versions checked on Maven Central / project docs.
+    implementation("org.apache.commons:commons-compress:1.28.0")
+    implementation("org.tukaani:xz:1.10")   // needed by commons-compress for LZMA/LZMA2 (the usual 7z codec)
+    implementation("com.github.junrar:junrar:7.5.5")
     implementation("androidx.documentfile:documentfile:1.0.1")
     // Crashlytics only (no Analytics). BoM controls versions.
     implementation(platform("com.google.firebase:firebase-bom:34.11.0"))

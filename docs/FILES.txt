@@ -26,6 +26,7 @@ app/src/main/java/com/filemind/smartmanager/core/Timeline.kt
 app/src/main/java/com/filemind/smartmanager/core/Treemap.kt
 app/src/main/java/com/filemind/smartmanager/core/ZipLab.kt
 app/src/main/java/com/filemind/smartmanager/core/ZipMaker.kt
+app/src/main/java/com/filemind/smartmanager/data/ArchiveReaders.kt
 app/src/main/java/com/filemind/smartmanager/data/FolderLister.kt
 app/src/main/java/com/filemind/smartmanager/data/ImageHasher.kt
 app/src/main/java/com/filemind/smartmanager/data/PendingRunner.kt
@@ -77,6 +78,7 @@ docs/PERMISSIONS.md
 docs/PLAY_CHECKLIST.md
 docs/PRIVACY_POLICY.md
 docs/RELEASE.md
+docs/THIRD_PARTY.md
 docs/store/play_icon_512.png
 gradle.properties
 keystore.properties.example

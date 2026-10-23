@@ -31,8 +31,8 @@ private fun ArchiveList(vm: AppViewModel, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         TextButton(onBack) { Text("رجوع") }
         Text("مختبر الأرشيفات", style = MaterialTheme.typography.titleLarge)
-        Text("ZIP: عرض المحتوى والبحث والاستخراج. RAR و7Z: عرض معلومات الملف فقط (لا توجد مكتبة مرخّصة مضافة). لا يوجد إنشاء أرشيفات بعد.", style = MaterialTheme.typography.bodySmall)
-        // TODO: ZIP creation, RAR/7Z reading via a licensed library, archive-vs-archive comparison.
+        Text("ZIP: عرض واستخراج آمن وإنشاء من المتصفح. 7Z وRAR: عرض المحتويات والبحث فقط (بلا استخراج). RAR5 والأرشيفات المحمية بكلمة مرور غير مدعومة. لا يُحذف أي أرشيف.", style = MaterialTheme.typography.bodySmall)
+        // TODO: RAR/7Z extraction, archive-vs-archive comparison.
         if (archives.isEmpty()) Text("لا توجد أرشيفات في الملفات المفحوصة. أضف مجلداً من الشاشة الرئيسية.", Modifier.padding(16.dp))
         LazyColumn {
             items(archives, key = { it.path }) { e ->
@@ -54,6 +54,7 @@ private fun ArchiveDetail(vm: AppViewModel, onBack: () -> Unit) {
     var q by remember(s) { mutableStateOf("") }
     val sel = remember(s) { mutableStateListOf<String>() }
     var all by remember { mutableStateOf(false) }
+    val canExtract = s.entry.extension == "zip"   // 7Z/RAR are listing-only
     val shown = remember(s, q) { s.items.filter { !it.isDir && (q.isBlank() || it.name.contains(q, true)) } }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -71,16 +72,17 @@ private fun ArchiveDetail(vm: AppViewModel, onBack: () -> Unit) {
         msg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         if (s.items.isNotEmpty()) {
             OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("بحث داخل الأرشيف") })
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!canExtract) Text("هذه الصيغة للعرض فقط: لا يمكن استخراجها من التطبيق بعد.", style = MaterialTheme.typography.bodySmall)
+            if (canExtract) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button({ all = true; picker.launch(null) }) { Text("استخراج الكل") }
                 OutlinedButton({ all = false; picker.launch(null) }, enabled = sel.isNotEmpty()) { Text("استخراج المحدد (${sel.size})") }
             }
-            Text("الملفات الموجودة في الوجهة لا تُستبدل: تُتجاوز وتُحصى في النتيجة.", style = MaterialTheme.typography.bodySmall)
+            if (canExtract) Text("الملفات الموجودة في الوجهة لا تُستبدل: تُتجاوز وتُحصى في النتيجة.", style = MaterialTheme.typography.bodySmall)
         }
         LazyColumn(Modifier.weight(1f)) {
             items(shown, key = { it.name }) { it ->
-                Row(Modifier.fillMaxWidth().clickable { if (it.name in sel) sel.remove(it.name) else sel.add(it.name) }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(it.name in sel, { c -> if (c) sel.add(it.name) else sel.remove(it.name) })
+                Row(Modifier.fillMaxWidth().clickable(enabled = canExtract) { if (it.name in sel) sel.remove(it.name) else sel.add(it.name) }, verticalAlignment = Alignment.CenterVertically) {
+                    if (canExtract) Checkbox(it.name in sel, { c -> if (c) sel.add(it.name) else sel.remove(it.name) })
                     Column { Text(it.name, maxLines = 1); Text(fmtSize(it.size), style = MaterialTheme.typography.bodySmall) }
                 }
             }
