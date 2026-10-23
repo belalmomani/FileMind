@@ -41,3 +41,9 @@ base64 -w0 /المسار/إلى/المفتاح.jks > ~/key.txt
 
 ## تنبيه
 أول بناء release قد يكشف أخطاء التصغير (R8) التي لا تظهر في بناء debug. إن فشل فأرسل لي سجل الخطوة الفاشلة.
+
+## 5) نشر سياسة الخصوصية (مطلوبة في Play)
+1. لا تفعّل هذه الخطوة قبل أن يُملأ البريد الإلكتروني في `docs/index.html` و`docs/PRIVACY_POLICY.md`.
+2. في GitHub: **Settings ← Pages ← Build and deployment**: Source = **Deploy from a branch**، Branch = **main**، المجلد **/docs** ثم Save. (في الحساب المجاني يلزم أن يكون المستودع عاماً.)
+3. بعد دقائق يكون الرابط: `https://belalmomani.github.io/FileMind/` وهو الذي يوضع في Play Console كرابط سياسة الخصوصية.
+4. اختر في Play Console أن التطبيق **غير موجّه للأطفال** ليتوافق مع السياسة.

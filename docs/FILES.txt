@@ -79,6 +79,7 @@ docs/PLAY_CHECKLIST.md
 docs/PRIVACY_POLICY.md
 docs/RELEASE.md
 docs/THIRD_PARTY.md
+docs/index.html
 docs/store/play_icon_512.png
 gradle.properties
 keystore.properties.example
