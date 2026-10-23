@@ -5,6 +5,7 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+!app/filemind-debug.keystore
 .idea/
 captures/
 .env

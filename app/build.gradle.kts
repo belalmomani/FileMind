@@ -35,6 +35,12 @@ android {
         buildConfigField("String", "STARTIO_APP_ID", "\"$startioId\"")
     }
     signingConfigs {
+        // Shared DEBUG key (public on purpose, NOT secret, never used for Play): CI would otherwise sign every debug build with a new random key,
+        // and Android refuses to install a build over one signed with a different key.
+        getByName("debug") {
+            storeFile = file("filemind-debug.keystore")
+            storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android"
+        }
         if (signing.containsKey("storeFile")) create("release") {
             storeFile = rootProject.file(signing.getProperty("storeFile"))
             storePassword = signing.getProperty("storePassword")

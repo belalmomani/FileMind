@@ -4,6 +4,7 @@
 LICENSE.TODO
 README.md
 app/build.gradle.kts
+app/filemind-debug.keystore
 app/proguard-rules.pro
 app/src/main/AndroidManifest.xml
 app/src/main/java/com/filemind/smartmanager/AppViewModel.kt
