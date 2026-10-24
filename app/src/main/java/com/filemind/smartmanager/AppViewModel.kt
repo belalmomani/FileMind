@@ -237,6 +237,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return system to (entries - system.toSet())
     }
 
+    /** The generic "Files" URI is not accepted by the system delete request; rebuild it as the type-specific collection URI (image/audio/video) with the same id and volume. */
+    private fun typedMediaUri(cr: android.content.ContentResolver, uri: Uri): Uri {
+        val id = android.content.ContentUris.parseId(uri)
+        val vol = uri.pathSegments.firstOrNull() ?: "external"
+        val type = cr.query(uri, arrayOf("media_type"), null, null, null)?.use { if (it.moveToFirst()) it.getInt(0) else 0 } ?: 0
+        val base = when (type) {
+            1 -> android.provider.MediaStore.Images.Media.getContentUri(vol)
+            2 -> android.provider.MediaStore.Audio.Media.getContentUri(vol)
+            3 -> android.provider.MediaStore.Video.Media.getContentUri(vol)
+            else -> return uri
+        }
+        return android.content.ContentUris.withAppendedId(base, id)
+    }
+
+    /**
+     * Builds the system delete-confirmation for real media items (Android 11+). Returns null when the system refuses; in that case the
+     * granted-folder route is tried, the outcome is logged, and the message shows the exact refusal reason.
+     */
+    fun buildDeleteRequest(entries: List<FileEntry>): android.content.IntentSender? {
+        if (android.os.Build.VERSION.SDK_INT < 30) return null
+        val cr = getApplication<Application>().contentResolver
+        return try {
+            android.provider.MediaStore.createDeleteRequest(cr, entries.map { typedMediaUri(cr, Uri.parse(it.path)) }).intentSender
+        } catch (ex: Exception) {
+            val detail = "${ex.javaClass.simpleName}: ${ex.message?.take(140)}"
+            logDelete(entries, false, "رفض النظام طلب الحذف: $detail")
+            deleteViaGrantedFolders(entries)
+            message.value = (message.value ?: "تعذر الحذف عبر النظام") + " [$detail]"
+            null
+        }
+    }
+
     /** Deletes non-media MediaStore entries (subtitles, documents, unknown) through a granted folder. Logs both outcomes and reports what could not be deleted. */
     fun deleteViaGrantedFolders(entries: List<FileEntry>) {
         val cr = getApplication<Application>().contentResolver
