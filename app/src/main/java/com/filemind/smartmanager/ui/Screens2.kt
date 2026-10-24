@@ -56,7 +56,13 @@ fun rememberDeleter(vm: AppViewModel, onFinished: () -> Unit): (List<FileEntry>)
         if (media.isNotEmpty()) {
             pendingMedia = media
             if (Build.VERSION.SDK_INT >= 30) {
-                launcher.launch(IntentSenderRequest.Builder(MediaStore.createDeleteRequest(cr, media.map { Uri.parse(it.path) }).intentSender).build())
+                try {
+                    launcher.launch(IntentSenderRequest.Builder(MediaStore.createDeleteRequest(cr, media.map { Uri.parse(it.path) }).intentSender).build())
+                } catch (ex: Exception) {   // the system may refuse the request by throwing: never crash
+                    vm.logDelete(media, false, "رفض النظام طلب الحذف: ${ex.javaClass.simpleName}")
+                    vm.message.value = "تعذر الحذف عبر النظام (${ex.javaClass.simpleName})."
+                    onFinished()
+                }
             } else {
                 val ok = media.all { runCatching { cr.delete(Uri.parse(it.path), null, null) > 0 }.getOrDefault(false) }
                 vm.logDelete(media, ok, if (!ok) "رفض النظام الحذف" else null); onFinished()

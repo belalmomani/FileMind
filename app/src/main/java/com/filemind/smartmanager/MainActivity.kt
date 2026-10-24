@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,11 +43,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        LocalCrashLog.install(this)
         AdsManager.init(this)
         setContent {
             val mode by vm.settings.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
             val conflict by vm.conflict.collectAsState()
             val opRunning by vm.opProgress.collectAsState()
+            var crashText by remember { mutableStateOf(LocalCrashLog.read(this@MainActivity)) }
             val stack = remember { mutableStateListOf<Screen>(Screen.Home) }
             fun push(s: Screen) { stack.add(s) }
             fun pop() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
@@ -87,6 +91,27 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     conflict?.let { c -> ConflictDialog(c) { d, all -> vm.answerConflict(d, all) } }
+                    crashText?.let { txt ->
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = {},
+                            title = { androidx.compose.material3.Text("توقف التطبيق في المرة السابقة") },
+                            text = {
+                                Column(Modifier.verticalScroll(rememberScrollState())) {
+                                    androidx.compose.material3.Text("هذا سجل محلي على جهازك فقط ولا يُرسل تلقائياً. شاركه لإصلاح العطل (قد يحوي أسماء ملفات).")
+                                    androidx.compose.material3.Text(txt.take(1500), style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                                }
+                            },
+                            confirmButton = {
+                                androidx.compose.material3.TextButton({
+                                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, txt)
+                                    startActivity(android.content.Intent.createChooser(send, "مشاركة سجل العطل"))
+                                }) { androidx.compose.material3.Text("مشاركة") }
+                            },
+                            dismissButton = {
+                                androidx.compose.material3.TextButton({ LocalCrashLog.clear(this@MainActivity); crashText = null }) { androidx.compose.material3.Text("تجاهل") }
+                            },
+                        )
+                    }
                 }
             }
         }

@@ -78,8 +78,15 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
         if (media.isNotEmpty()) {
             pendingMedia = media
             if (Build.VERSION.SDK_INT >= 30) {
-                val pi = MediaStore.createDeleteRequest(cr, media.map { Uri.parse(it.path) })
-                deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                // The system may refuse the request (e.g. non-media items, no access) by throwing: never let that crash the app.
+                try {
+                    val pi = MediaStore.createDeleteRequest(cr, media.map { Uri.parse(it.path) })
+                    deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                } catch (ex: Exception) {
+                    vm.logDelete(media, false, "رفض النظام طلب الحذف: ${ex.javaClass.simpleName}")
+                    vm.message.value = "تعذر الحذف عبر النظام (${ex.javaClass.simpleName}). لملفات غير الوسائط أضف مجلدها من «المتصفح» ثم احذف منه."
+                    selected.clear()
+                }
             } else {
                 val ok = media.all { runCatching { cr.delete(Uri.parse(it.path), null, null) > 0 }.getOrDefault(false) }
                 vm.logDelete(media, ok, if (!ok) "رفض النظام الحذف" else null)

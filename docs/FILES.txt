@@ -8,6 +8,7 @@ app/filemind-debug.keystore
 app/proguard-rules.pro
 app/src/main/AndroidManifest.xml
 app/src/main/java/com/filemind/smartmanager/AppViewModel.kt
+app/src/main/java/com/filemind/smartmanager/LocalCrashLog.kt
 app/src/main/java/com/filemind/smartmanager/MainActivity.kt
 app/src/main/java/com/filemind/smartmanager/ads/AdsManager.kt
 app/src/main/java/com/filemind/smartmanager/core/ArabicQueryParser.kt
