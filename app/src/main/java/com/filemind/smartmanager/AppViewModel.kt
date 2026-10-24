@@ -229,6 +229,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (ok) rescan()
     }
 
+    /** Splits MediaStore entries into (deletable through the system confirmation, everything else). Below Android 11 all go the old way. */
+    fun splitMedia(entries: List<FileEntry>): Pair<List<FileEntry>, List<FileEntry>> {
+        if (android.os.Build.VERSION.SDK_INT < 30) return entries to emptyList()
+        val cr = getApplication<Application>().contentResolver
+        val system = entries.filter { SafOps.isRealMedia(cr, Uri.parse(it.path)) }
+        return system to (entries - system.toSet())
+    }
+
+    /** Deletes non-media MediaStore entries (subtitles, documents, unknown) through a granted folder. Logs both outcomes and reports what could not be deleted. */
+    fun deleteViaGrantedFolders(entries: List<FileEntry>) {
+        val cr = getApplication<Application>().contentResolver
+        val done = entries.filter { SafOps.deleteViaRoots(cr, roots.value, it) }
+        val left = entries - done.toSet()
+        if (done.isNotEmpty()) logDelete(done, true)
+        if (left.isNotEmpty()) {
+            logDelete(left, false, "لا يوجد مجلد ممنوح يغطي مسار الملف")
+            message.value = "تعذر حذف ${left.size} ملف ليس صورة أو فيديو أو صوتاً: أضف مجلده (مثل Download/Film) من «إضافة مجلد» ثم أعد المحاولة"
+        }
+    }
+
     fun clearLog() = viewModelScope.launch { db.logs().clear() }
 
     /** The same physical file can appear via MediaStore AND a granted folder; keep the folder entry only. */

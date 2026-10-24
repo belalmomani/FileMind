@@ -19,6 +19,9 @@ data class PlannedMove(val entry: FileEntry, val targetDir: String, val reason: 
 data class OrganizePlan(val moves: List<PlannedMove>, val skipped: List<PlannedMove>, val newFolders: Set<String>)
 
 object Organizer {
+    const val NUMERIC_NAMES_FOLDER = "أسماء رقمية"
+    const val MONTH_PREFIX = "شهر"
+
     private val yearInName = Regex("(?<!\\d)(19|20)\\d{2}(?!\\d)")
 
     /** "Bilal_2020_01", "bilal-5" → "bilal". Shared name key for grouping similar names. */
@@ -34,13 +37,16 @@ object Organizer {
     }
 
     private fun part(e: FileEntry, g: GroupBy, rule: OrganizeRule): String? = when (g) {
-        GroupBy.NAME -> nameKey(e.baseName)
+        GroupBy.NAME -> nameKey(e.baseName).let { k ->
+            // Names with no letters (e.g. screenshots named 1785982504049) must NOT become one folder per file; share a single folder.
+            if (k.any { it.isLetter() }) k else NUMERIC_NAMES_FOLDER   // TODO: smarter grouping of numeric names (by date prefix) if wanted
+        }
         GroupBy.EXTENSION -> e.extension ?: "بدون_امتداد"
         GroupBy.TYPE -> e.type.name
         GroupBy.YEAR, GroupBy.YEAR_MONTH -> dateOf(e, rule.dateSource)?.let {
             val c = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
             if (g == GroupBy.YEAR) "${c.get(Calendar.YEAR)}"
-            else "${c.get(Calendar.YEAR)}/${"%02d".format(c.get(Calendar.MONTH) + 1)}"
+            else "${c.get(Calendar.YEAR)}/$MONTH_PREFIX ${"%02d".format(c.get(Calendar.MONTH) + 1)}"   // 2025/شهر 01 … 2025/شهر 12 (sorts correctly)
         }
     }
 

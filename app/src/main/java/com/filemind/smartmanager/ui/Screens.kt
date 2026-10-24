@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -117,7 +118,9 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     } }
     val totalSize = remember(files) { files.sumOf { it.size } }
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // One scrollable grid: header (search, status, buttons) spans the full width, then the category tiles. Nothing is hidden on small screens.
+    LazyVerticalGrid(GridCells.Fixed(if (gridCols > 0) gridCols else 2), Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item(span = { GridItemSpan(maxLineSpan) }) { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("FileMind", style = MaterialTheme.typography.headlineMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(ask, { ask = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("اسأل ملفاتك: مثل «اعرض كل ملفات ZIP من سنة 2025»") })
@@ -170,29 +173,28 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
         indexTime?.let { Text("الفهرس المحلي (نسخة مخبأة قد تكون قديمة) محدّث: ${fmtDate(it)}" + if (scanning) " — جارٍ التحديث…" else "", style = MaterialTheme.typography.bodySmall) }
         if (failed.isNotEmpty()) Text("المجلدات التي تعذر فحصها غير محسوبة (لا تُعتبر فارغة).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(openFolders) { Text("المجلدات") }
-            OutlinedButton(openOps) { Text("العمليات") }
-            OutlinedButton(openSettings) { Text("الإعدادات") }
+            HomeButton("المتصفح", openBrowser, Modifier.weight(1f))
+            HomeButton("المجلدات", openFolders, Modifier.weight(1f))
+            HomeButton("العمليات", openOps, Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(openStorage) { Text("التخزين") }
-            OutlinedButton(openOrganizer) { Text("التنظيم") }
-            OutlinedButton(openDuplicates) { Text("المكررات") }
-            OutlinedButton(openArchives) { Text("الأرشيفات") }
+            HomeButton("التخزين", openStorage, Modifier.weight(1f))
+            HomeButton("التنظيم", openOrganizer, Modifier.weight(1f))
+            HomeButton("المكررات", openDuplicates, Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(openTimeline) { Text("آلة الزمن") }
-            OutlinedButton(openCompare) { Text("مقارنة / مفقود") }
-            OutlinedButton(openBrowser) { Text("المتصفح") }
+            HomeButton("الأرشيفات", openArchives, Modifier.weight(1f))
+            HomeButton("آلة الزمن", openTimeline, Modifier.weight(1f))
+            HomeButton("مقارنة / مفقود", openCompare, Modifier.weight(1f))
         }
-        LazyVerticalGrid(GridCells.Fixed(if (gridCols > 0) gridCols else 2), Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HomeButton("الإعدادات", openSettings, Modifier.fillMaxWidth())
+        } }
             items(Category.entries.toList()) { c ->
                 Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(c.argb).copy(alpha = 0.85f)).clickable { openCategory(c) }.padding(12.dp).fillMaxWidth()) {
                     Text(if (c == Category.STALE) "تحتاج مراجعة — منذ $reviewMonths أشهر" else c.titleAr, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2)
                     Text("${counts[c]}", color = Color.White, style = MaterialTheme.typography.headlineSmall)
                 }
             }
-        }
     }
     if (showRationale) AlertDialog(
         onDismissRequest = { showRationale = false },
@@ -201,6 +203,13 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
         confirmButton = { TextButton({ showRationale = false; permLauncher.launch(mediaPermissions()) }) { Text("متابعة") } },
         dismissButton = { TextButton({ showRationale = false }) { Text("لاحقاً") } },
     )
+}
+
+@Composable
+private fun HomeButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    OutlinedButton(onClick, modifier, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)) {
+        Text(label, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelLarge)
+    }
 }
 
 @Composable

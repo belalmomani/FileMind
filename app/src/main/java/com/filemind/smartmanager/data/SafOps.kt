@@ -47,6 +47,25 @@ object SafOps {
         return found
     }
 
+    /** MediaStore media_type: 1 image, 2 audio, 3 video. Anything else (none, subtitles, documents…) is refused by the system delete-request. */
+    fun isRealMedia(cr: ContentResolver, uri: Uri): Boolean =
+        runCatching { cr.query(uri, arrayOf("media_type"), null, null, null)?.use { it.moveToFirst() && it.getInt(0) in 1..3 } ?: false }.getOrDefault(false)
+
+    /** Deletes a MediaStore entry through a folder the user granted (SAF) when that folder covers its path on the primary volume. */
+    fun deleteViaRoots(cr: ContentResolver, roots: Collection<String>, e: com.filemind.smartmanager.core.FileEntry): Boolean {
+        val rel = e.parent.trim('/')
+        val docId = "primary:" + (if (rel.isEmpty()) "" else "$rel/") + e.name
+        for (r in roots) {
+            val tree = Uri.parse(r)
+            val rootId = runCatching { DocumentsContract.getTreeDocumentId(tree) }.getOrNull() ?: continue
+            val covers = if (rootId.endsWith(":")) docId.startsWith(rootId) else docId.startsWith("$rootId/")
+            if (!covers) continue
+            val ok = runCatching { DocumentsContract.deleteDocument(cr, DocumentsContract.buildDocumentUriUsingTree(tree, docId)) }.getOrDefault(false)
+            if (ok) return true
+        }
+        return false
+    }
+
     fun createFile(cr: ContentResolver, tree: Uri, dirId: String, name: String): Uri? {
         val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
         return try { DocumentsContract.createDocument(cr, DocumentsContract.buildDocumentUriUsingTree(tree, dirId), mime, name) } catch (e: Exception) { null }

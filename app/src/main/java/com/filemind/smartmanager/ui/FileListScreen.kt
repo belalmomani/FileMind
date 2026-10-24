@@ -75,24 +75,27 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
             val ok = saf.all { runCatching { DocumentsContract.deleteDocument(cr, Uri.parse(it.path)) }.getOrDefault(false) }
             vm.logDelete(saf, ok, if (!ok) "تعذر حذف بعض الملفات" else null)
         }
-        if (media.isNotEmpty()) {
-            pendingMedia = media
+        // Real media (image/audio/video) uses the system confirmation; subtitles/documents/unknown only work through a granted folder.
+        val (system, other) = vm.splitMedia(media)
+        if (other.isNotEmpty()) vm.deleteViaGrantedFolders(other)
+        if (system.isNotEmpty()) {
+            pendingMedia = system
             if (Build.VERSION.SDK_INT >= 30) {
-                // The system may refuse the request (e.g. non-media items, no access) by throwing: never let that crash the app.
+                // The system may still refuse the request by throwing: never let that crash the app.
                 try {
-                    val pi = MediaStore.createDeleteRequest(cr, media.map { Uri.parse(it.path) })
+                    val pi = MediaStore.createDeleteRequest(cr, system.map { Uri.parse(it.path) })
                     deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
                 } catch (ex: Exception) {
-                    vm.logDelete(media, false, "رفض النظام طلب الحذف: ${ex.javaClass.simpleName}")
-                    vm.message.value = "تعذر الحذف عبر النظام (${ex.javaClass.simpleName}). لملفات غير الوسائط أضف مجلدها من «المتصفح» ثم احذف منه."
+                    vm.logDelete(system, false, "رفض النظام طلب الحذف: ${ex.javaClass.simpleName}")
+                    vm.message.value = "تعذر الحذف عبر النظام (${ex.javaClass.simpleName})."
                     selected.clear()
                 }
             } else {
-                val ok = media.all { runCatching { cr.delete(Uri.parse(it.path), null, null) > 0 }.getOrDefault(false) }
-                vm.logDelete(media, ok, if (!ok) "رفض النظام الحذف" else null)
+                val ok = system.all { runCatching { cr.delete(Uri.parse(it.path), null, null) > 0 }.getOrDefault(false) }
+                vm.logDelete(system, ok, if (!ok) "رفض النظام الحذف" else null)
             }
         }
-        if (saf.isNotEmpty() && media.isEmpty()) selected.clear()
+        if (system.isEmpty()) selected.clear()
     }
 
     fun open(e: FileEntry) {

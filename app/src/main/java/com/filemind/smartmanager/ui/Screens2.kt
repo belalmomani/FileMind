@@ -53,19 +53,21 @@ fun rememberDeleter(vm: AppViewModel, onFinished: () -> Unit): (List<FileEntry>)
             val ok = saf.all { runCatching { DocumentsContract.deleteDocument(cr, Uri.parse(it.path)) }.getOrDefault(false) }
             vm.logDelete(saf, ok, if (!ok) "تعذر حذف بعض الملفات" else null)
         }
-        if (media.isNotEmpty()) {
-            pendingMedia = media
+        val (system, other) = vm.splitMedia(media)
+        if (other.isNotEmpty()) vm.deleteViaGrantedFolders(other)
+        if (system.isNotEmpty()) {
+            pendingMedia = system
             if (Build.VERSION.SDK_INT >= 30) {
                 try {
-                    launcher.launch(IntentSenderRequest.Builder(MediaStore.createDeleteRequest(cr, media.map { Uri.parse(it.path) }).intentSender).build())
+                    launcher.launch(IntentSenderRequest.Builder(MediaStore.createDeleteRequest(cr, system.map { Uri.parse(it.path) }).intentSender).build())
                 } catch (ex: Exception) {   // the system may refuse the request by throwing: never crash
-                    vm.logDelete(media, false, "رفض النظام طلب الحذف: ${ex.javaClass.simpleName}")
+                    vm.logDelete(system, false, "رفض النظام طلب الحذف: ${ex.javaClass.simpleName}")
                     vm.message.value = "تعذر الحذف عبر النظام (${ex.javaClass.simpleName})."
                     onFinished()
                 }
             } else {
-                val ok = media.all { runCatching { cr.delete(Uri.parse(it.path), null, null) > 0 }.getOrDefault(false) }
-                vm.logDelete(media, ok, if (!ok) "رفض النظام الحذف" else null); onFinished()
+                val ok = system.all { runCatching { cr.delete(Uri.parse(it.path), null, null) > 0 }.getOrDefault(false) }
+                vm.logDelete(system, ok, if (!ok) "رفض النظام الحذف" else null); onFinished()
             }
         } else onFinished()
     }
