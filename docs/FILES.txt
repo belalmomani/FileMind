@@ -1,7 +1,7 @@
 .github/workflows/build.yml
 .github/workflows/release.yml
 .gitignore
-LICENSE.TODO
+LICENSE
 README.md
 app/build.gradle.kts
 app/filemind-debug.keystore
