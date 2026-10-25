@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -48,6 +49,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
     val visible = remember(all, filter) { filter.apply(all.filter { base(it, now) }) }
     val selected: SnapshotStateList<String> = remember { mutableStateListOf() }
     val selEntries = visible.filter { it.path in selected }
+    val showThumbs by vm.settings.showThumbs.collectAsState(initial = true)
     val askBeforeDelete by vm.settings.confirmDelete.collectAsState(initial = true)
     var confirmDelete by remember { mutableStateOf(false) }
     var pendingMove by remember { mutableStateOf(true) }
@@ -156,7 +158,8 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Box(Modifier.size(14.dp).clip(CircleShape).background(Color(if (e.isHidden) FileType.HIDDEN_ARGB else e.type.argb)))
+                        if (showThumbs && e.type == FileType.IMAGE) WallThumb(e.path, Modifier.size(48.dp).clip(RoundedCornerShape(6.dp)))
+                        else Box(Modifier.size(14.dp).clip(CircleShape).background(Color(if (e.isHidden) FileType.HIDDEN_ARGB else e.type.argb)))
                         Column(Modifier.weight(1f)) {
                             Text(e.name, maxLines = 1, style = MaterialTheme.typography.bodyLarge)
                             Text("${fmtSize(e.size)} · ${fmtDate(e.modifiedMs)} · ${e.parent}", maxLines = 1, style = MaterialTheme.typography.bodySmall)

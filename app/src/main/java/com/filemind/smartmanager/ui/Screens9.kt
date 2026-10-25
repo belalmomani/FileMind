@@ -50,7 +50,7 @@ private object WallThumbs {
 }
 
 @Composable
-private fun WallThumb(path: String, modifier: Modifier) {
+fun WallThumb(path: String, modifier: Modifier) {   // also used by the file list rows
     val cr = LocalContext.current.contentResolver
     val bmp by produceState<ImageBitmap?>(WallThumbs.cache.get(path), path) {
         if (value == null) value = withContext(Dispatchers.IO) { WallThumbs.permits.withPermit { WallThumbs.load(cr, path) } }

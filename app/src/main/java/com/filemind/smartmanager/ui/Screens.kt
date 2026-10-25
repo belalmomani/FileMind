@@ -275,6 +275,7 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
     val iconSize by vm.settings.iconSize.collectAsState(initial = 40)
     val gridColumns by vm.settings.gridColumns.collectAsState(initial = 0)
     val trashDays by vm.settings.trashDays.collectAsState(initial = 30)
+    val showThumbs by vm.settings.showThumbs.collectAsState(initial = true)
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { TextButton(onBack) { Text("رجوع") }; Text("المظهر", style = MaterialTheme.typography.titleMedium) }
         items(ThemeMode.entries.toList()) { m ->
@@ -302,6 +303,10 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
                 listOf(0 to "تلقائي", 2 to "2", 3 to "3", 4 to "4").forEach { (n, label) -> FilterChip(gridColumns == n, { scope.launch { vm.settings.setGridColumns(n) } }, { Text(label) }) }
             }
             Text("يؤثر على المتصفح (القائمة والشبكة) وعلى تصنيفات الشاشة الرئيسية.", style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) { Switch(showThumbs, { scope.launch { vm.settings.setShowThumbs(it) } }); Text("  إظهار مصغّرات الصور في القوائم") }
+            Text("أوقفه إن كان الهاتف بطيئاً أو أردت توفير الذاكرة.", style = MaterialTheme.typography.bodySmall)
         }
         item {
             Text("سلة المحذوفات", style = MaterialTheme.typography.titleMedium)
