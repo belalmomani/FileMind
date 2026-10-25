@@ -37,6 +37,7 @@ sealed interface Screen {
     data object Browser : Screen
     data object Trash : Screen
     data object Wall : Screen
+    data object TimeMachine : Screen
     data class Files(val key: String, val title: String, val category: Category?, val filter: FileFilter?, val folder: String? = null, val custom: ((com.filemind.smartmanager.core.FileEntry, Long) -> Boolean)? = null) : Screen
 }
 
@@ -85,10 +86,11 @@ class MainActivity : ComponentActivity() {
                             Screen.Browser -> BrowserScreen(vm, ::pop)
                             Screen.Trash -> TrashScreen(vm, ::pop)
                             Screen.Wall -> PhotoWallScreen(vm, ::pop)
+                            Screen.TimeMachine -> PhotoTimeMachineScreen(vm, ::pop)
                             Screen.Archives -> ArchivesScreen(vm, ::pop)
                             Screen.Timeline -> TimelineScreen(vm, openMonth = { t, pred -> push(Screen.Files("TL_$t", t, null, null, custom = pred)) }, onBack = ::pop)
                             is Screen.Files -> FileListScreen(vm, s.title, s.key,
-                                base = s.custom ?: s.category?.test ?: { _, _ -> true }, initial = s.filter, onBack = ::pop, openWall = { push(Screen.Wall) })
+                                base = s.custom ?: s.category?.test ?: { _, _ -> true }, initial = s.filter, onBack = ::pop, openWall = { push(Screen.Wall) }, openTime = { push(Screen.TimeMachine) })
                         }
                         }
                         BottomAdBar(hidden = opRunning != null)

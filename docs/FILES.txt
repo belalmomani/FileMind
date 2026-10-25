@@ -22,6 +22,7 @@ app/src/main/java/com/filemind/smartmanager/core/MergePlan.kt
 app/src/main/java/com/filemind/smartmanager/core/OrganizeRuleJson.kt
 app/src/main/java/com/filemind/smartmanager/core/Organizer.kt
 app/src/main/java/com/filemind/smartmanager/core/PerceptualHash.kt
+app/src/main/java/com/filemind/smartmanager/core/PhotoTimeline.kt
 app/src/main/java/com/filemind/smartmanager/core/SourceComparer.kt
 app/src/main/java/com/filemind/smartmanager/core/Timeline.kt
 app/src/main/java/com/filemind/smartmanager/core/TrashIndex.kt
@@ -46,6 +47,7 @@ app/src/main/java/com/filemind/smartmanager/ui/FileListScreen.kt
 app/src/main/java/com/filemind/smartmanager/ui/FolderIcon.kt
 app/src/main/java/com/filemind/smartmanager/ui/Format.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens.kt
+app/src/main/java/com/filemind/smartmanager/ui/Screens10.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens2.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens3.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens4.kt
@@ -77,6 +79,7 @@ app/src/test/java/com/filemind/smartmanager/core/LogicTest.kt
 app/src/test/java/com/filemind/smartmanager/core/MergePlanTest.kt
 app/src/test/java/com/filemind/smartmanager/core/OrganizerNamingTest.kt
 app/src/test/java/com/filemind/smartmanager/core/PerceptualHashTest.kt
+app/src/test/java/com/filemind/smartmanager/core/PhotoTimelineTest.kt
 app/src/test/java/com/filemind/smartmanager/core/TimelineTest.kt
 app/src/test/java/com/filemind/smartmanager/core/TrashIndexTest.kt
 app/src/test/java/com/filemind/smartmanager/core/WallLayoutTest.kt
