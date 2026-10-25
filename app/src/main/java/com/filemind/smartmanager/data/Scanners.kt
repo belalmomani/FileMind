@@ -24,6 +24,7 @@ class SafScanner(private val cr: ContentResolver) {
                     while (c.moveToNext()) {
                         val id = c.getString(0) ?: continue
                         val name = c.getString(1) ?: continue
+                        if (name == TrashStore.TRASH_DIR) continue   // never index our own trash
                         if (c.getString(2) == Document.MIME_TYPE_DIR) { stack.add(id); continue }
                         val mod = if (c.isNull(4)) null else c.getLong(4).takeIf { it > 0 }
                         out += FileEntry(DocumentsContract.buildDocumentUriUsingTree(tree, id).toString(), name, if (c.isNull(3)) 0 else c.getLong(3), mod, parent = pid)
@@ -48,6 +49,7 @@ class MediaScanner(private val cr: ContentResolver) {
                 while (c.moveToNext()) {
                     val name = c.getString(1) ?: continue
                     val size = c.getLong(2); if (size <= 0) continue
+                    if (c.getString(5).orEmpty().contains(TrashStore.TRASH_DIR)) continue   // never index our own trash
                     val modS = c.getLong(3)
                     val taken = if (c.isNull(4)) 0L else c.getLong(4)
                     out += FileEntry(ContentUris.withAppendedId(base, c.getLong(0)).toString(), name, size,

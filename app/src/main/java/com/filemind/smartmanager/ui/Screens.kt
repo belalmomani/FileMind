@@ -39,7 +39,7 @@ private fun mediaPermissions(): Array<String> =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (String, FileFilter) -> Unit, openFolders: () -> Unit, openOps: () -> Unit, openSettings: () -> Unit, openStorage: () -> Unit, openOrganizer: () -> Unit, openDuplicates: () -> Unit, openArchives: () -> Unit, openTimeline: () -> Unit, openCompare: () -> Unit, openBrowser: () -> Unit) {
+fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (String, FileFilter) -> Unit, openFolders: () -> Unit, openTrash: () -> Unit, openOps: () -> Unit, openSettings: () -> Unit, openStorage: () -> Unit, openOrganizer: () -> Unit, openDuplicates: () -> Unit, openArchives: () -> Unit, openTimeline: () -> Unit, openCompare: () -> Unit, openBrowser: () -> Unit) {
     val ctx = LocalContext.current
     val files by vm.files.collectAsState()
     val scanning by vm.scanning.collectAsState()
@@ -187,7 +187,10 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
             HomeButton("آلة الزمن", openTimeline, Modifier.weight(1f))
             HomeButton("مقارنة / مفقود", openCompare, Modifier.weight(1f))
         }
-        HomeButton("الإعدادات", openSettings, Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HomeButton("السلة", openTrash, Modifier.weight(1f))
+            HomeButton("الإعدادات", openSettings, Modifier.weight(1f))
+        }
         } }
             items(Category.entries.toList()) { c ->
                 Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(c.argb).copy(alpha = 0.85f)).clickable { openCategory(c) }.padding(12.dp).fillMaxWidth()) {
@@ -271,6 +274,7 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
     val crash by vm.crashReports.collectAsState()
     val iconSize by vm.settings.iconSize.collectAsState(initial = 40)
     val gridColumns by vm.settings.gridColumns.collectAsState(initial = 0)
+    val trashDays by vm.settings.trashDays.collectAsState(initial = 30)
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { TextButton(onBack) { Text("رجوع") }; Text("المظهر", style = MaterialTheme.typography.titleMedium) }
         items(ThemeMode.entries.toList()) { m ->
@@ -298,6 +302,13 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
                 listOf(0 to "تلقائي", 2 to "2", 3 to "3", 4 to "4").forEach { (n, label) -> FilterChip(gridColumns == n, { scope.launch { vm.settings.setGridColumns(n) } }, { Text(label) }) }
             }
             Text("يؤثر على المتصفح (القائمة والشبكة) وعلى تصنيفات الشاشة الرئيسية.", style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            Text("سلة المحذوفات", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(7 to "7 أيام", 30 to "30 يوماً", 90 to "90 يوماً", 0 to "بدون سلة").forEach { (d, label) -> FilterChip(trashDays == d, { scope.launch { vm.settings.setTrashDays(d) } }, { Text(label) }) }
+            }
+            Text("الحذف من المتصفح ومن الملفات داخل مجلداتك الممنوحة يُنقل إلى السلة ويمكن استرجاعه. «بدون سلة» يعيد الحذف النهائي.", style = MaterialTheme.typography.bodySmall)
         }
         item {
             Text("فترة «تحتاج مراجعة»", style = MaterialTheme.typography.titleMedium)

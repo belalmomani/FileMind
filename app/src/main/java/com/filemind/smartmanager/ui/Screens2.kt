@@ -45,7 +45,7 @@ fun rememberDeleter(vm: AppViewModel, onFinished: () -> Unit): (List<FileEntry>)
         vm.logDelete(pendingMedia, res.resultCode == Activity.RESULT_OK, if (res.resultCode != Activity.RESULT_OK) "ألغى المستخدم أو رفض النظام" else null)
         onFinished()
     }
-    return { entries ->
+    val permanent: (List<FileEntry>) -> Unit = { entries ->
         val cr = ctx.contentResolver
         val media = entries.filter { Uri.parse(it.path).authority == "media" }
         val saf = entries - media.toSet()
@@ -73,6 +73,7 @@ fun rememberDeleter(vm: AppViewModel, onFinished: () -> Unit): (List<FileEntry>)
             }
         } else onFinished()
     }
+    return { entries -> vm.deleteWithTrash(entries) { rest -> if (rest.isEmpty()) onFinished() else permanent(rest) } }
 }
 
 @Composable

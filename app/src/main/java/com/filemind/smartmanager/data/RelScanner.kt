@@ -19,6 +19,7 @@ object RelScanner {
                     while (c.moveToNext()) {
                         val cid = c.getString(0) ?: continue
                         val name = c.getString(1) ?: continue
+                        if (name == TrashStore.TRASH_DIR) continue   // never compare/copy our own trash
                         val path = if (rel.isEmpty()) name else "$rel/$name"
                         if (c.getString(2) == Document.MIME_TYPE_DIR) stack.add(cid to path)
                         else out += RelFile(path, if (c.isNull(3)) 0 else c.getLong(3), if (c.isNull(4)) null else c.getLong(4),

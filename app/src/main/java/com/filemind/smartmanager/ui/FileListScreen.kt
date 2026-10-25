@@ -67,7 +67,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
         selected.clear()
     }
 
-    fun performDelete(entries: List<FileEntry>) {
+    fun performDeleteNow(entries: List<FileEntry>) {
         val cr = ctx.contentResolver
         val media = entries.filter { Uri.parse(it.path).authority == "media" }
         val saf = entries - media.toSet()
@@ -96,6 +96,11 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
             }
         }
         if (system.isEmpty()) selected.clear()
+    }
+
+    // Trash first (when on and a granted folder covers the files); whatever is left continues with the old flow.
+    fun performDelete(entries: List<FileEntry>) {
+        vm.deleteWithTrash(entries) { rest -> if (rest.isEmpty()) selected.clear() else performDeleteNow(rest) }
     }
 
     fun open(e: FileEntry) {

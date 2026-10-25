@@ -11,6 +11,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import kotlinx.coroutines.flow.first
+import com.filemind.smartmanager.data.TrashStore
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
@@ -104,14 +106,28 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
     }
 
     val askDelete by vm.settings.confirmDelete.collectAsState(initial = true)
+    val trashDays by vm.settings.trashDays.collectAsState(initial = 30)
     fun doDelete(list: List<BItem>) {
         scope.launch {
+            val days = vm.settings.trashDays.first()
+            var moved = 0; var failed = 0
             withContext(Dispatchers.IO) {
                 list.forEach { i ->
-                    val ok = runCatching { DocumentsContract.deleteDocument(cr, Uri.parse(i.uri)) }.getOrDefault(false)
-                    vm.logOp("حذف", i.name, "", i.uri, "", ok, if (!ok) "تعذر الحذف" else null)
+                    if (days > 0 && cur != null) {
+                        // Trash is on: move it; if the move fails nothing is deleted.
+                        val ok = TrashStore.trash(cr, Uri.parse(cur.tree), i.docId, cur.docId, i.name, if (i.isDir) null else i.size, i.isDir)
+                        if (ok) moved++ else failed++
+                        vm.logOp("سلة", i.name, "", i.uri, "", ok, if (!ok) "تعذر النقل إلى السلة (لم يُحذف شيء)" else null)
+                    } else {
+                        val ok = runCatching { DocumentsContract.deleteDocument(cr, Uri.parse(i.uri)) }.getOrDefault(false)
+                        vm.logOp("حذف", i.name, "", i.uri, "", ok, if (!ok) "فشل الحذف" else null)
+                    }
                 }
             }
+            val parts = ArrayList<String>()
+            if (moved > 0) parts += "نُقل $moved عنصر إلى السلة (تُحذف نهائياً بعد $days يوماً)"
+            if (failed > 0) parts += "تعذر نقل $failed عنصر إلى السلة فبقي كما هو"
+            if (parts.isNotEmpty()) vm.message.value = parts.joinToString("، ")
             selected.clear(); reload++; vm.rescan()
         }
     }
@@ -271,8 +287,11 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
     )
     if (dialog == "delete" && sel.isNotEmpty()) AlertDialog(
         onDismissRequest = { dialog = "" }, title = { Text("حذف ${sel.size} عنصر؟") },
-        text = { Text(if (sel.any { it.isDir }) "ستُحذف محتويات المجلدات المحددة أيضاً. لا تراجع من داخل التطبيق." else "لا تراجع عن الحذف من داخل التطبيق.") },
-        confirmButton = { TextButton({ val list = sel.toList(); dialog = ""; doDelete(list) }) { Text("حذف") } },
+        text = { Text(
+            (if (trashDays > 0) "سيُنقل إلى السلة ويمكن استرجاعه خلال $trashDays يوماً." else "الحذف نهائي ولا يمكن التراجع عنه.") +
+                (if (sel.any { it.isDir }) "\nالمجلدات تُنقل بكل محتوياتها." else "")
+        ) },
+        confirmButton = { TextButton({ val list = sel.toList(); dialog = ""; doDelete(list) }) { Text(if (trashDays > 0) "نقل إلى السلة" else "حذف") } },
         dismissButton = { TextButton({ dialog = "" }) { Text("إلغاء") } },
     )
 }

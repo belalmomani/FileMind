@@ -49,7 +49,7 @@ object FolderLister {
             val r = list(cr, tree, id)
             if (r.error != null) { failed += rel; continue }
             if (r.items.isEmpty()) empties += rel
-            for (i in r.items) { if (i.isDir) stack.add(i.docId to "$rel/${i.name}") else files += i to rel }
+            for (i in r.items) { if (i.name == TrashStore.TRASH_DIR) continue; if (i.isDir) stack.add(i.docId to "$rel/${i.name}") else files += i to rel }
         }
         return WalkResult(files, empties, failed)
     }

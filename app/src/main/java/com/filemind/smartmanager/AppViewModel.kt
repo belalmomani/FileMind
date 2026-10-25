@@ -38,6 +38,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val roots = settings.roots.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     init {
+        // Auto-purge of expired trash (only trashed items with a known deletion time; never anything else).
+        viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(5000)
+            runCatching { TrashStore.purge(getApplication<Application>().contentResolver, settings.roots.first(), settings.trashDays.first()) }
+        }
         viewModelScope.launch { applyCrashReports(settings.crashReports.first()) }
         // Log retention: delete old log rows only (never files).
         viewModelScope.launch {
@@ -227,6 +232,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val now = System.currentTimeMillis()
         entries.forEach { e -> db.logs().insert(OperationLog(type = "حذف", timeMs = now, oldName = e.name, newName = "", oldPath = e.path, newPath = "", size = e.size, status = if (ok) "DONE" else "FAILED", reason = reason)) }
         if (ok) rescan()
+    }
+
+    /**
+     * Moves entries into the in-app trash when the trash is on AND a granted folder covers them. [onLeft] receives the entries that were NOT handled
+     * (no covering folder, or trash off) so the caller can continue with the old flow. Entries whose trashing failed are NOT deleted: they stay and are reported.
+     */
+    fun deleteWithTrash(entries: List<FileEntry>, onLeft: (List<FileEntry>) -> Unit) = viewModelScope.launch {
+        val days = settings.trashDays.first()
+        if (days <= 0) { onLeft(entries); return@launch }
+        val cr = getApplication<Application>().contentResolver
+        val rootSet = roots.value
+        val left = ArrayList<FileEntry>(); var moved = 0; var failed = 0
+        withContext(Dispatchers.IO) {
+            for (e in entries) {
+                val docId = TrashStore.docIdOf(e); val tree = docId?.let { TrashStore.rootFor(rootSet, it) }
+                if (docId == null || tree == null) { left += e; continue }
+                val ok = TrashStore.trash(cr, tree, docId, TrashStore.parentDocId(docId), e.name, e.size, false)
+                if (ok) moved++ else failed++
+                logOp("سلة", e.name, "", e.path, "", ok, if (!ok) "تعذر النقل إلى السلة (لم يُحذف شيء)" else null)
+            }
+        }
+        if (moved > 0) rescan()
+        val parts = ArrayList<String>()
+        if (moved > 0) parts += "نُقل $moved ملف إلى السلة (تُحذف نهائياً بعد $days يوماً)"
+        if (failed > 0) parts += "تعذر نقل $failed ملف إلى السلة فبقي كما هو"
+        if (parts.isNotEmpty()) message.value = parts.joinToString("، ")
+        onLeft(left)
     }
 
     /** Splits MediaStore entries into (deletable through the system confirmation, everything else). Below Android 11 all go the old way. */
