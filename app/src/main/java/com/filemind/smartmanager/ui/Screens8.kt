@@ -22,13 +22,13 @@ fun TrashScreen(vm: AppViewModel, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val roots by vm.roots.collectAsState()
     val days by vm.settings.trashDays.collectAsState(initial = 30)
-    var items by remember { mutableStateOf<List<TrashStore.Item>?>(null) }
+    var trashItems by remember { mutableStateOf<List<TrashStore.Item>?>(null) }
     var reload by remember { mutableStateOf(0) }
     var msg by remember { mutableStateOf<String?>(null) }
     var confirmEmpty by remember { mutableStateOf(false) }
     var confirmOne by remember { mutableStateOf<TrashStore.Item?>(null) }
 
-    LaunchedEffect(roots, reload) { items = null; items = withContext(Dispatchers.IO) { TrashStore.list(cr, roots) } }
+    LaunchedEffect(roots, reload) { trashItems = null; trashItems = withContext(Dispatchers.IO) { TrashStore.list(cr, roots) } }
 
     fun restore(i: TrashStore.Item) = scope.launch {
         val r = withContext(Dispatchers.IO) { TrashStore.restore(cr, i) }
@@ -51,7 +51,7 @@ fun TrashScreen(vm: AppViewModel, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onBack) { Text("رجوع") }; Spacer(Modifier.weight(1f))
-            TextButton({ confirmEmpty = true }, enabled = !items.isNullOrEmpty()) { Text("إفراغ السلة") }
+            TextButton({ confirmEmpty = true }, enabled = !trashItems.isNullOrEmpty()) { Text("إفراغ السلة") }
         }
         Text("السلة", style = MaterialTheme.typography.titleLarge)
         Text(
@@ -61,7 +61,7 @@ fun TrashScreen(vm: AppViewModel, onBack: () -> Unit) {
         )
         Text("لا تُنقل إلى السلة إلا الملفات داخل مجلدات منحتَ التطبيق وصولاً إليها (إضافة مجلد). غيرها يُحذف بنافذة تأكيد النظام ولا يمكن استرجاعه.", style = MaterialTheme.typography.bodySmall)
         msg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-        val list = items
+        val list = trashItems
         when {
             list == null -> Text("جارٍ القراءة…")
             list.isEmpty() -> Text("السلة فارغة.", Modifier.padding(16.dp))
@@ -91,7 +91,7 @@ fun TrashScreen(vm: AppViewModel, onBack: () -> Unit) {
     if (confirmEmpty) AlertDialog(
         onDismissRequest = { confirmEmpty = false }, title = { Text("إفراغ السلة؟") },
         text = { Text("سيُحذف كل ما في السلة نهائياً ولا يمكن التراجع.") },
-        confirmButton = { TextButton({ confirmEmpty = false; items?.let { deleteForever(it) } }) { Text("إفراغ") } },
+        confirmButton = { TextButton({ confirmEmpty = false; trashItems?.let { deleteForever(it) } }) { Text("إفراغ") } },
         dismissButton = { TextButton({ confirmEmpty = false }) { Text("إلغاء") } },
     )
     confirmOne?.let { i ->
