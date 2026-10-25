@@ -39,10 +39,14 @@ import kotlin.math.roundToInt
 /** Small in-memory thumbnail cache + a limit on parallel decodes, so panning a big wall never decodes everything at once. */
 private object WallThumbs {
     val cache = LruCache<String, ImageBitmap>(220)
+
+    /** Poster frame of a video through the system thumbnail provider (Android 10+); null below that or when unavailable. */
+    private fun videoFrame(cr: android.content.ContentResolver, path: String): android.graphics.Bitmap? =
+        if (android.os.Build.VERSION.SDK_INT >= 29) runCatching { cr.loadThumbnail(Uri.parse(path), android.util.Size(240, 240), null) }.getOrNull() else null
     val permits = Semaphore(4)
 
-    fun load(cr: android.content.ContentResolver, path: String): ImageBitmap? {
-        val raw = ImageHasher.thumbnail(cr, Uri.parse(path), 120) ?: return null
+    fun load(cr: android.content.ContentResolver, path: String, video: Boolean = false): ImageBitmap? {
+        val raw = (if (video) videoFrame(cr, path) else ImageHasher.thumbnail(cr, Uri.parse(path), 120)) ?: return null
         val side = maxOf(raw.width, raw.height)
         val bmp = if (side > 192) android.graphics.Bitmap.createScaledBitmap(raw, raw.width * 192 / side, raw.height * 192 / side, true) else raw
         return bmp.asImageBitmap().also { cache.put(path, it) }
@@ -50,10 +54,10 @@ private object WallThumbs {
 }
 
 @Composable
-fun WallThumb(path: String, modifier: Modifier) {   // also used by the file list rows
+fun WallThumb(path: String, modifier: Modifier, video: Boolean = false) {   // also used by the file list rows and the category tiles
     val cr = LocalContext.current.contentResolver
     val bmp by produceState<ImageBitmap?>(WallThumbs.cache.get(path), path) {
-        if (value == null) value = withContext(Dispatchers.IO) { WallThumbs.permits.withPermit { WallThumbs.load(cr, path) } }
+        if (value == null) value = withContext(Dispatchers.IO) { WallThumbs.permits.withPermit { WallThumbs.load(cr, path, video) } }
     }
     val b = bmp
     if (b != null) Image(b, null, modifier, contentScale = ContentScale.Crop) else Box(modifier.background(Color.LightGray))

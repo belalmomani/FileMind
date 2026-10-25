@@ -117,6 +117,15 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
         if (c == Category.STALE) files.count { it.modifiedMs != null && now - it.modifiedMs > reviewMonths * 30L * DAY_MS } else files.count { c.test(it, now) }
     } }
     val totalSize = remember(files) { files.sumOf { it.size } }
+    val showThumbs by vm.settings.showThumbs.collectAsState(initial = true)
+    // Cover of each tile = the newest NON-hidden image/video that belongs to that same category (no image => plain colour tile).
+    val covers = remember(files, reviewMonths) {
+        val media = files.filter { (it.type == FileType.IMAGE || it.type == FileType.VIDEO) && !it.isHidden }
+        Category.entries.associateWith { c ->
+            media.filter { if (c == Category.STALE) it.modifiedMs != null && now - it.modifiedMs > reviewMonths * 30L * DAY_MS else c.test(it, now) }
+                .maxByOrNull { it.exifDateMs ?: it.modifiedMs ?: 0L }
+        }
+    }
 
     // One scrollable grid: header (search, status, buttons) spans the full width, then the category tiles. Nothing is hidden on small screens.
     LazyVerticalGrid(GridCells.Fixed(if (gridCols > 0) gridCols else 2), Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -193,9 +202,16 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
         }
         } }
             items(Category.entries.toList()) { c ->
-                Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(c.argb).copy(alpha = 0.85f)).clickable { openCategory(c) }.padding(12.dp).fillMaxWidth()) {
-                    Text(if (c == Category.STALE) "تحتاج مراجعة — منذ $reviewMonths أشهر" else c.titleAr, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2)
-                    Text("${counts[c]}", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                val cover = covers[c]
+                Box(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(c.argb).copy(alpha = 0.85f)).clickable { openCategory(c) }.fillMaxWidth().heightIn(min = 110.dp)) {
+                    if (showThumbs && cover != null && c != Category.HIDDEN) {
+                        WallThumb(cover.path, Modifier.matchParentSize(), video = cover.type == FileType.VIDEO)
+                        Box(Modifier.matchParentSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.10f), Color.Black.copy(alpha = 0.65f)))))
+                    }
+                    Column(Modifier.padding(12.dp)) {
+                        Text(if (c == Category.STALE) "تحتاج مراجعة — منذ $reviewMonths أشهر" else c.titleAr, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2)
+                        Text("${counts[c]}", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                    }
                 }
             }
     }
