@@ -234,6 +234,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (ok) rescan()
     }
 
+    /** Set by the file list just before opening the photo wall (plain field: read once when the wall opens). */
+    var wallRequest: WallRequest? = null
+
     /**
      * Moves entries into the in-app trash when the trash is on AND a granted folder covers them. [onLeft] receives the entries that were NOT handled
      * (no covering folder, or trash off) so the caller can continue with the old flow. Entries whose trashing failed are NOT deleted: they stay and are reported.
