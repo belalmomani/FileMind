@@ -287,6 +287,62 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- Photo map (opt-in): reads photo location metadata ON DEVICE only; resumable through a private cache ----
+    val geoIndex = kotlinx.coroutines.flow.MutableStateFlow<Map<String, GeoResult>>(emptyMap())
+    val geoProgress = kotlinx.coroutines.flow.MutableStateFlow<Pair<Int, Int>?>(null)
+    private var geoJob: Job? = null
+
+    fun stopGeoAnalysis() { geoJob?.cancel() }
+
+    fun analyzeGeo(photos: List<WallPhoto>) {
+        if (geoJob?.isActive == true) return
+        geoJob = viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>(); val cr = app.contentResolver
+            val cache = GeoCache.load(app)
+            fun sig(p: WallPhoto) = p.dateMs?.toString() ?: "-"
+            val found = HashMap<String, GeoResult>()
+            for (p in photos) cache[p.path]?.let { (s, r) -> if (s == sig(p)) found[p.path] = r }
+            geoIndex.value = HashMap(found)
+            val todo = photos.filter { it.path !in found }
+            val total = photos.size
+            var done = total - todo.size
+            geoProgress.value = done to total
+            val permits = Semaphore(3)
+            try {
+                kotlinx.coroutines.coroutineScope {
+                    todo.map { p ->
+                        async {
+                            permits.withPermit {
+                                ensureActive()
+                                val r = GeoReader.read(cr, p.path)    // null = unreadable (never cached, never reported as "no location")
+                                synchronized(found) {
+                                    if (r != null) { found[p.path] = r; cache[p.path] = sig(p) to r }
+                                    done++
+                                }
+                                if (done % 25 == 0) { geoIndex.value = synchronized(found) { HashMap(found) }; geoProgress.value = done to total }
+                            }
+                        }
+                    }.forEach { it.await() }
+                }
+            } finally {
+                kotlinx.coroutines.withContext(NonCancellable) {
+                    geoIndex.value = synchronized(found) { HashMap(found) }
+                    geoProgress.value = null
+                    GeoCache.save(app, cache)
+                }
+            }
+        }
+    }
+
+    /** Turns the photo map off AND deletes every stored location. */
+    fun disablePhotoMap() = viewModelScope.launch {
+        geoJob?.cancel()
+        settings.setPhotoMapEnabled(false)
+        withContext(Dispatchers.IO) { GeoCache.clear(getApplication<Application>()) }
+        geoIndex.value = emptyMap()
+        message.value = "أُوقفت خريطة الصور وحُذفت بيانات الموقع المخزنة"
+    }
+
     /** Set by the file list just before opening the photo wall (plain field: read once when the wall opens). */
     var wallRequest: WallRequest? = null
 

@@ -291,6 +291,7 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
     val iconSize by vm.settings.iconSize.collectAsState(initial = 40)
     val gridColumns by vm.settings.gridColumns.collectAsState(initial = 0)
     val trashDays by vm.settings.trashDays.collectAsState(initial = 30)
+    val photoMap by vm.settings.photoMapEnabled.collectAsState(initial = false)
     val showThumbs by vm.settings.showThumbs.collectAsState(initial = true)
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { TextButton(onBack) { Text("رجوع") }; Text("المظهر", style = MaterialTheme.typography.titleMedium) }
@@ -323,6 +324,13 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) { Switch(showThumbs, { scope.launch { vm.settings.setShowThumbs(it) } }); Text("  إظهار مصغّرات الصور في القوائم") }
             Text("أوقفه إن كان الهاتف بطيئاً أو أردت توفير الذاكرة.", style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            Text("خريطة الصور (اختيارية)", style = MaterialTheme.typography.titleMedium)
+            if (photoMap) {
+                Text("مفعّلة. مواقع صورك تُقرأ وتُخزَّن على جهازك فقط ولا تُرسل إلى أي جهة.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton({ vm.disablePhotoMap() }) { Text("إيقاف الخريطة وحذف بيانات الموقع المخزنة") }
+            } else Text("مطفأة. تُفعَّل من «عروض ← خريطة الصور» في قوائم الصور بعد موافقتك الصريحة.", style = MaterialTheme.typography.bodySmall)
         }
         item {
             Text("سلة المحذوفات", style = MaterialTheme.typography.titleMedium)

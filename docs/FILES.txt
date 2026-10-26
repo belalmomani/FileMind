@@ -19,6 +19,7 @@ app/src/main/java/com/filemind/smartmanager/core/FileFilter.kt
 app/src/main/java/com/filemind/smartmanager/core/FileTransfer.kt
 app/src/main/java/com/filemind/smartmanager/core/FileType.kt
 app/src/main/java/com/filemind/smartmanager/core/FolderGuard.kt
+app/src/main/java/com/filemind/smartmanager/core/GeoMap.kt
 app/src/main/java/com/filemind/smartmanager/core/MergePlan.kt
 app/src/main/java/com/filemind/smartmanager/core/OrganizeRuleJson.kt
 app/src/main/java/com/filemind/smartmanager/core/Organizer.kt
@@ -34,6 +35,7 @@ app/src/main/java/com/filemind/smartmanager/core/ZipMaker.kt
 app/src/main/java/com/filemind/smartmanager/data/ArchiveReaders.kt
 app/src/main/java/com/filemind/smartmanager/data/ColorCache.kt
 app/src/main/java/com/filemind/smartmanager/data/FolderLister.kt
+app/src/main/java/com/filemind/smartmanager/data/GeoCache.kt
 app/src/main/java/com/filemind/smartmanager/data/ImageHasher.kt
 app/src/main/java/com/filemind/smartmanager/data/PendingRunner.kt
 app/src/main/java/com/filemind/smartmanager/data/RelScanner.kt
@@ -51,6 +53,7 @@ app/src/main/java/com/filemind/smartmanager/ui/Format.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens10.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens11.kt
+app/src/main/java/com/filemind/smartmanager/ui/Screens12.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens2.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens3.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens4.kt
@@ -79,6 +82,7 @@ app/src/test/java/com/filemind/smartmanager/core/FileTransferTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FilterDateSourceTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FilterTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FolderGuardTest.kt
+app/src/test/java/com/filemind/smartmanager/core/GeoMapTest.kt
 app/src/test/java/com/filemind/smartmanager/core/LogicTest.kt
 app/src/test/java/com/filemind/smartmanager/core/MergePlanTest.kt
 app/src/test/java/com/filemind/smartmanager/core/OrganizerNamingTest.kt

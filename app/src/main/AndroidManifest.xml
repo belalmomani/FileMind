@@ -9,6 +9,8 @@
     <!-- Android 12 and below -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- Voice commands use the system speech recognizer via intent: no RECORD_AUDIO needed. -->
+    <!-- Optional photo map: lets the app read GPS metadata of the user's own photos on the device (asked only after explicit opt-in; never sent anywhere). -->
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Background resume of file operations (WorkManager foreground service, type dataSync). -->

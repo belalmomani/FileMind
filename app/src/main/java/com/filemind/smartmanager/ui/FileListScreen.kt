@@ -36,7 +36,7 @@ import com.filemind.smartmanager.core.*
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntry, Long) -> Boolean, initial: FileFilter?, onBack: () -> Unit, openWall: () -> Unit = {}, openTime: () -> Unit = {}, openColors: () -> Unit = {}) {
+fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntry, Long) -> Boolean, initial: FileFilter?, onBack: () -> Unit, openWall: () -> Unit = {}, openTime: () -> Unit = {}, openColors: () -> Unit = {}, openMap: () -> Unit = {}) {
     val ctx = LocalContext.current
     val all by vm.files.collectAsState()
     val msg by vm.message.collectAsState()
@@ -137,6 +137,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
                                 DropdownMenuItem({ Text("جدار الصور") }, { go(openWall) })
                                 DropdownMenuItem({ Text("رحلة زمنية") }, { go(openTime) })
                                 DropdownMenuItem({ Text("مستكشف الألوان") }, { go(openColors) })
+                                DropdownMenuItem({ Text("خريطة الصور (اختيارية)") }, { go(openMap) })
                             }
                         }
                     }
