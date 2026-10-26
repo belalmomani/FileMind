@@ -36,7 +36,7 @@ import com.filemind.smartmanager.core.*
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntry, Long) -> Boolean, initial: FileFilter?, onBack: () -> Unit, openWall: () -> Unit = {}, openTime: () -> Unit = {}) {
+fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntry, Long) -> Boolean, initial: FileFilter?, onBack: () -> Unit, openWall: () -> Unit = {}, openTime: () -> Unit = {}, openColors: () -> Unit = {}) {
     val ctx = LocalContext.current
     val all by vm.files.collectAsState()
     val msg by vm.message.collectAsState()
@@ -122,16 +122,24 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
                 title = { Text(if (selected.isEmpty()) "$title (${visible.size})" else "محدد: ${selected.size}") },
                 navigationIcon = { TextButton(onBack) { Text("رجوع") } },
                 actions = {
-                    if (selected.isEmpty() && visible.any { it.type == FileType.IMAGE }) TextButton({
-                        val imgs = visible.filter { it.type == FileType.IMAGE }
-                        vm.wallRequest = WallRequest(title, imgs.map { WallPhoto(it.path, it.parent, it.exifDateMs ?: it.modifiedMs) })
-                        openWall()
-                    }) { Text("جدار") }
-                    if (selected.isEmpty() && visible.any { it.type == FileType.IMAGE }) TextButton({
-                        val imgs = visible.filter { it.type == FileType.IMAGE }
-                        vm.wallRequest = WallRequest(title, imgs.map { WallPhoto(it.path, it.parent, it.exifDateMs ?: it.modifiedMs) })
-                        openTime()
-                    }) { Text("رحلة") }
+                    if (selected.isEmpty() && visible.any { it.type == FileType.IMAGE }) {
+                        // One "views" menu for the photo-only views (wall / time machine / color explorer) so the top bar stays uncluttered.
+                        var viewsMenu by remember { mutableStateOf(false) }
+                        fun go(open: () -> Unit) {
+                            viewsMenu = false
+                            val imgs = visible.filter { it.type == FileType.IMAGE }
+                            vm.wallRequest = WallRequest(title, imgs.map { WallPhoto(it.path, it.parent, it.exifDateMs ?: it.modifiedMs) })
+                            open()
+                        }
+                        Box {
+                            TextButton({ viewsMenu = true }) { Text("عروض") }
+                            DropdownMenu(viewsMenu, { viewsMenu = false }) {
+                                DropdownMenuItem({ Text("جدار الصور") }, { go(openWall) })
+                                DropdownMenuItem({ Text("رحلة زمنية") }, { go(openTime) })
+                                DropdownMenuItem({ Text("مستكشف الألوان") }, { go(openColors) })
+                            }
+                        }
+                    }
                     TextButton({ if (selected.size == visible.size) selected.clear() else { selected.clear(); selected.addAll(visible.map { it.path }) } }) { Text("تحديد الكل") }
                 },
             )

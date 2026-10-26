@@ -1,5 +1,10 @@
 package com.filemind.smartmanager
 
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.async
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
@@ -10,6 +15,7 @@ import com.filemind.smartmanager.data.*
 import com.filemind.smartmanager.data.db.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
@@ -232,6 +238,53 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val now = System.currentTimeMillis()
         entries.forEach { e -> db.logs().insert(OperationLog(type = "حذف", timeMs = now, oldName = e.name, newName = "", oldPath = e.path, newPath = "", size = e.size, status = if (ok) "DONE" else "FAILED", reason = reason)) }
         if (ok) rescan()
+    }
+
+    // ---- Color explorer: low-resolution color analysis of photos, resumable through an on-disk cache ----
+    val colorIndex = kotlinx.coroutines.flow.MutableStateFlow<Map<String, ColorProfile>>(emptyMap())
+    val colorProgress = kotlinx.coroutines.flow.MutableStateFlow<Pair<Int, Int>?>(null)
+    private var colorJob: Job? = null
+
+    fun stopColorAnalysis() { colorJob?.cancel() }
+
+    fun analyzeColors(photos: List<WallPhoto>) {
+        if (colorJob?.isActive == true) return
+        colorJob = viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>(); val cr = app.contentResolver
+            val cache = ColorCache.load(app)
+            fun sig(p: WallPhoto) = p.dateMs?.toString() ?: "-"
+            val found = HashMap<String, ColorProfile>()
+            for (p in photos) cache[p.path]?.let { (s, pr) -> if (s == sig(p)) found[p.path] = pr }
+            colorIndex.value = HashMap(found)
+            val todo = photos.filter { it.path !in found }
+            val total = photos.size
+            var done = total - todo.size
+            colorProgress.value = done to total
+            val permits = Semaphore(2)
+            try {
+                kotlinx.coroutines.coroutineScope {
+                    todo.map { p ->
+                        async {
+                            permits.withPermit {
+                                ensureActive()
+                                val pr = runCatching { ColorWork.profileOf(cr, p.path) }.getOrNull()
+                                synchronized(found) {
+                                    if (pr != null) { found[p.path] = pr; cache[p.path] = sig(p) to pr }
+                                    done++
+                                }
+                                if (done % 25 == 0) { colorIndex.value = synchronized(found) { HashMap(found) }; colorProgress.value = done to total }
+                            }
+                        }
+                    }.forEach { it.await() }
+                }
+            } finally {
+                kotlinx.coroutines.withContext(NonCancellable) {
+                    colorIndex.value = synchronized(found) { HashMap(found) }
+                    colorProgress.value = null
+                    ColorCache.save(app, cache)
+                }
+            }
+        }
     }
 
     /** Set by the file list just before opening the photo wall (plain field: read once when the wall opens). */

@@ -13,6 +13,7 @@ app/src/main/java/com/filemind/smartmanager/MainActivity.kt
 app/src/main/java/com/filemind/smartmanager/ads/AdsManager.kt
 app/src/main/java/com/filemind/smartmanager/core/ArabicQueryParser.kt
 app/src/main/java/com/filemind/smartmanager/core/BulkRenamer.kt
+app/src/main/java/com/filemind/smartmanager/core/ColorAnalysis.kt
 app/src/main/java/com/filemind/smartmanager/core/DuplicateFinder.kt
 app/src/main/java/com/filemind/smartmanager/core/FileFilter.kt
 app/src/main/java/com/filemind/smartmanager/core/FileTransfer.kt
@@ -31,6 +32,7 @@ app/src/main/java/com/filemind/smartmanager/core/WallLayout.kt
 app/src/main/java/com/filemind/smartmanager/core/ZipLab.kt
 app/src/main/java/com/filemind/smartmanager/core/ZipMaker.kt
 app/src/main/java/com/filemind/smartmanager/data/ArchiveReaders.kt
+app/src/main/java/com/filemind/smartmanager/data/ColorCache.kt
 app/src/main/java/com/filemind/smartmanager/data/FolderLister.kt
 app/src/main/java/com/filemind/smartmanager/data/ImageHasher.kt
 app/src/main/java/com/filemind/smartmanager/data/PendingRunner.kt
@@ -48,6 +50,7 @@ app/src/main/java/com/filemind/smartmanager/ui/FolderIcon.kt
 app/src/main/java/com/filemind/smartmanager/ui/Format.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens10.kt
+app/src/main/java/com/filemind/smartmanager/ui/Screens11.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens2.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens3.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens4.kt
@@ -70,6 +73,7 @@ app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
 app/src/main/res/values-ar/strings.xml
 app/src/main/res/values/strings.xml
 app/src/test/java/com/filemind/smartmanager/core/ArchiveAndTaskTest.kt
+app/src/test/java/com/filemind/smartmanager/core/ColorAnalysisTest.kt
 app/src/test/java/com/filemind/smartmanager/core/CompareTreemapTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FileTransferTest.kt
 app/src/test/java/com/filemind/smartmanager/core/FilterDateSourceTest.kt
