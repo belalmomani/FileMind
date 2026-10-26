@@ -63,6 +63,7 @@ app/src/main/java/com/filemind/smartmanager/ui/Screens7.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens8.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens9.kt
 app/src/main/java/com/filemind/smartmanager/ui/Theme.kt
+app/src/main/java/com/filemind/smartmanager/ui/ThumbSizeBar.kt
 app/src/main/res/mipmap-hdpi/ic_launcher.png
 app/src/main/res/mipmap-hdpi/ic_launcher_round.png
 app/src/main/res/mipmap-mdpi/ic_launcher.png

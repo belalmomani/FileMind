@@ -91,6 +91,7 @@ private fun MapBody(vm: AppViewModel, req: WallRequest?, onBack: () -> Unit) {
     val density = LocalDensity.current
     val geo by vm.geoIndex.collectAsState()
     val progress by vm.geoProgress.collectAsState()
+    val thumbDp by vm.thumbDp.collectAsState()
     LaunchedEffect(req) { req?.let { vm.analyzeGeo(it.photos) } }
     DisposableEffect(Unit) { onDispose { vm.stopGeoAnalysis() } }
 
@@ -213,8 +214,9 @@ private fun MapBody(vm: AppViewModel, req: WallRequest?, onBack: () -> Unit) {
                 },
                 style = MaterialTheme.typography.bodySmall,
             )
+            if (panel.isNotEmpty()) ThumbSizeBar(vm)
             if (panel.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-                items(panel.take(300), key = { it.path }) { p -> WallThumb(p.path, Modifier.size(84.dp).clip(RoundedCornerShape(8.dp)).clickable { open(p) }) }
+                items(panel.take(300), key = { it.path }) { p -> WallThumb(p.path, Modifier.size(thumbDp.coerceIn(56, 140).dp).clip(RoundedCornerShape(8.dp)).clickable { open(p) }) }
             }
             if (unread > 0 && progress == null) Text("تعذرت قراءة بيانات الموقع من $unread صورة (لا يُعدّ هذا «بدون موقع»).", style = MaterialTheme.typography.labelSmall)
             Text("كل المعالجة على جهازك. لا تُرسَل المواقع إلى أي خدمة.", style = MaterialTheme.typography.labelSmall)

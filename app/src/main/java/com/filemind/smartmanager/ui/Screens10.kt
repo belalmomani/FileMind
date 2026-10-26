@@ -32,7 +32,6 @@ private sealed interface TItem {
     class Photos(override val section: Int, val photos: List<WallPhoto>) : TItem
 }
 
-private const val COLS = 4
 
 /**
  * Photo Time Machine: your photos as a journey from today back to the oldest one. Scroll, drag the time slider to jump between periods,
@@ -46,12 +45,15 @@ fun PhotoTimeMachineScreen(vm: AppViewModel, onBack: () -> Unit) {
     val sections by produceState<List<TimeSection>?>(null, req) {
         value = req?.let { r -> withContext(Dispatchers.Default) { PhotoTimeline.build(r.photos, System.currentTimeMillis()) } }
     }
-    val flat = remember(sections) {
+    val thumbDp by vm.thumbDp.collectAsState()
+    val screenW = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    val cols = ((screenW - 16) / (thumbDp + 4)).coerceAtLeast(2)
+    val flat = remember(sections, cols) {
         sections?.let { list ->
             val out = ArrayList<TItem>()
             list.forEachIndexed { i, s ->
                 out += TItem.Header(i, s.label, s.photos.size)
-                s.photos.chunked(COLS).forEach { out += TItem.Photos(i, it) }
+                s.photos.chunked(cols).forEach { out += TItem.Photos(i, it) }
             }
             out
         }
@@ -102,6 +104,7 @@ fun PhotoTimeMachineScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }
             }
         }
+        ThumbSizeBar(vm)
         when {
             sections == null -> Text("جارٍ تجهيز الرحلة…", Modifier.padding(16.dp))
             flat.isNullOrEmpty() -> Text("لا توجد صور لعرضها.", Modifier.padding(16.dp))
@@ -111,7 +114,7 @@ fun PhotoTimeMachineScreen(vm: AppViewModel, onBack: () -> Unit) {
                         is TItem.Header -> Text("${it.label} · ${it.count}", Modifier.padding(start = 4.dp, top = 14.dp, bottom = 6.dp), style = MaterialTheme.typography.titleMedium)
                         is TItem.Photos -> Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             it.photos.forEach { p -> WallThumb(p.path, Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(6.dp)).clickable { open(p) }) }
-                            repeat(COLS - it.photos.size) { Spacer(Modifier.weight(1f)) }
+                            repeat(cols - it.photos.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }

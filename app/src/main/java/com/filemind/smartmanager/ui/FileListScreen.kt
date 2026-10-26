@@ -50,6 +50,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
     val selected: SnapshotStateList<String> = remember { mutableStateListOf() }
     val selEntries = visible.filter { it.path in selected }
     val showThumbs by vm.settings.showThumbs.collectAsState(initial = true)
+    val thumbDp by vm.thumbDp.collectAsState()
     val askBeforeDelete by vm.settings.confirmDelete.collectAsState(initial = true)
     var confirmDelete by remember { mutableStateOf(false) }
     var pendingMove by remember { mutableStateOf(true) }
@@ -162,6 +163,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
             msg?.let { Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.primary) }
             if (key.startsWith("CAT_STALE")) Text("لم يتم تعديل هذه الملفات منذ ${key.substringAfterLast('_')} أشهر. هل تريد فتحها أو نقلها أو حذفها أو الاحتفاظ بها؟", Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
             if (visible.isEmpty()) Text("لا توجد ملفات مطابقة. (إن لم تمنح صلاحية أو مجلداً فقد لا تظهر ملفات.)", Modifier.padding(16.dp))
+            if (showThumbs && selected.isEmpty() && visible.any { it.type == FileType.IMAGE }) ThumbSizeBar(vm)
             LazyColumn(Modifier.weight(1f)) {
                 items(visible, key = { it.path }) { e ->
                     Row(
@@ -172,7 +174,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        if (showThumbs && e.type == FileType.IMAGE) WallThumb(e.path, Modifier.size(48.dp).clip(RoundedCornerShape(6.dp)))
+                        if (showThumbs && e.type == FileType.IMAGE) WallThumb(e.path, Modifier.size((thumbDp / 2).coerceIn(40, 100).dp).clip(RoundedCornerShape(6.dp)))
                         else Box(Modifier.size(14.dp).clip(CircleShape).background(Color(if (e.isHidden) FileType.HIDDEN_ARGB else e.type.argb)))
                         Column(Modifier.weight(1f)) {
                             Text(e.name, maxLines = 1, style = MaterialTheme.typography.bodyLarge)

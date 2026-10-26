@@ -43,6 +43,7 @@ fun ColorExplorerScreen(vm: AppViewModel, onBack: () -> Unit) {
     val req = remember { vm.wallRequest }
     val index by vm.colorIndex.collectAsState()
     val progress by vm.colorProgress.collectAsState()
+    val thumbDp by vm.thumbDp.collectAsState()
     var group by remember { mutableStateOf<ColorGroup?>(null) }
     var hue by remember { mutableStateOf<Float?>(null) }
     var tol by remember { mutableStateOf(25f) }
@@ -90,11 +91,12 @@ fun ColorExplorerScreen(vm: AppViewModel, onBack: () -> Unit) {
             Modifier.padding(16.dp),
         )
         LazyVerticalGrid(
-            GridCells.Fixed(3), Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(4.dp),
+            GridCells.Adaptive(thumbDp.dp), Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             items(shown, key = { it.path }) { p -> WallThumb(p.path, Modifier.aspectRatio(1f).clip(RoundedCornerShape(6.dp)).clickable { open(p) }) }
         }
+        ThumbSizeBar(vm)
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             hue?.let { Text("نطاق اللون: ±${tol.roundToInt()}° (الصور الأقرب أولاً)", style = MaterialTheme.typography.bodySmall) }
             if (hue != null) Slider(tol, { tol = it }, valueRange = 10f..60f)

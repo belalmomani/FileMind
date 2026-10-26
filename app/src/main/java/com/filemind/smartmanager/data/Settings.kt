@@ -30,6 +30,7 @@ class SettingsRepository(private val ctx: Context) {
     private val trashDaysKey = intPreferencesKey("trash_days")
     private val showThumbsKey = booleanPreferencesKey("show_thumbs")
     private val photoMapKey = booleanPreferencesKey("photo_map_enabled")
+    private val photoThumbKey = intPreferencesKey("photo_thumb_dp")
     private val iconSizeKey = intPreferencesKey("icon_size_dp")
     private val gridColsKey = intPreferencesKey("grid_columns")
 
@@ -45,6 +46,7 @@ class SettingsRepository(private val ctx: Context) {
     val confirmDelete = ctx.store.data.map { it[confirmDeleteKey] ?: true }
     val iconSize = ctx.store.data.map { it[iconSizeKey] ?: 40 }          // base icon size (dp): 32 / 40 / 56
     val gridColumns = ctx.store.data.map { it[gridColsKey] ?: 0 }        // 0 = automatic
+    val photoThumbDp = ctx.store.data.map { (it[photoThumbKey] ?: 96).coerceIn(56, 200) }   // size of photo thumbnails chosen with the slider
     val photoMapEnabled = ctx.store.data.map { it[photoMapKey] ?: false }   // opt-in: OFF until the user agrees
     val showThumbs = ctx.store.data.map { it[showThumbsKey] ?: true }
     val trashDays = ctx.store.data.map { it[trashDaysKey] ?: 30 }   // 0 = trash disabled (permanent delete as before)
@@ -63,6 +65,7 @@ class SettingsRepository(private val ctx: Context) {
     suspend fun setConfirmDelete(v: Boolean) { ctx.store.edit { it[confirmDeleteKey] = v } }
     suspend fun setIconSize(dp: Int) { ctx.store.edit { it[iconSizeKey] = dp } }
     suspend fun setGridColumns(n: Int) { ctx.store.edit { it[gridColsKey] = n } }
+    suspend fun setPhotoThumbDp(v: Int) { ctx.store.edit { it[photoThumbKey] = v.coerceIn(56, 200) } }
     suspend fun setPhotoMapEnabled(v: Boolean) { ctx.store.edit { it[photoMapKey] = v } }
     suspend fun setShowThumbs(v: Boolean) { ctx.store.edit { it[showThumbsKey] = v } }
     suspend fun setTrashDays(d: Int) { ctx.store.edit { it[trashDaysKey] = d } }
