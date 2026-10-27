@@ -36,28 +36,41 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-/** Small in-memory thumbnail cache + a limit on parallel decodes, so panning a big wall never decodes everything at once. */
+/** Thumbnail cache limited by BYTES (large thumbnails for one-photo-per-row views would exhaust memory) + a limit on parallel decodes. */
 private object WallThumbs {
-    val cache = LruCache<String, ImageBitmap>(220)
-
-    /** Poster frame of a video through the system thumbnail provider (Android 10+); null below that or when unavailable. */
-    private fun videoFrame(cr: android.content.ContentResolver, path: String): android.graphics.Bitmap? =
-        if (android.os.Build.VERSION.SDK_INT >= 29) runCatching { cr.loadThumbnail(Uri.parse(path), android.util.Size(240, 240), null) }.getOrNull() else null
+    private val maxBytes = (Runtime.getRuntime().maxMemory() / 8).toInt().coerceIn(16 shl 20, 96 shl 20)
+    val cache = object : LruCache<String, android.graphics.Bitmap>(maxBytes) {
+        override fun sizeOf(key: String, value: android.graphics.Bitmap): Int = value.byteCount
+    }
     val permits = Semaphore(4)
 
-    fun load(cr: android.content.ContentResolver, path: String, video: Boolean = false): ImageBitmap? {
-        val raw = (if (video) videoFrame(cr, path) else ImageHasher.thumbnail(cr, Uri.parse(path), 120)) ?: return null
+    /** Decode size (longest side, px) for a tile shown at about [sizeDp]: sharper for big tiles, cheap for small ones. */
+    fun bucket(sizeDp: Int, density: Float): Int {
+        val px = sizeDp * 1.5f * density
+        return when { px <= 160f -> 120; px <= 320f -> 240; px <= 640f -> 480; else -> 960 }
+    }
+
+    /** Poster frame of a video through the system thumbnail provider (Android 10+); null below that or when unavailable. */
+    private fun videoFrame(cr: android.content.ContentResolver, path: String, side: Int): android.graphics.Bitmap? =
+        if (android.os.Build.VERSION.SDK_INT >= 29) runCatching { cr.loadThumbnail(Uri.parse(path), android.util.Size(side, side), null) }.getOrNull() else null
+
+    fun load(cr: android.content.ContentResolver, path: String, video: Boolean, bucket: Int): android.graphics.Bitmap? {
+        val raw = (if (video) videoFrame(cr, path, bucket) else ImageHasher.thumbnail(cr, Uri.parse(path), bucket / 2)) ?: return null
         val side = maxOf(raw.width, raw.height)
-        val bmp = if (side > 192) android.graphics.Bitmap.createScaledBitmap(raw, raw.width * 192 / side, raw.height * 192 / side, true) else raw
-        return bmp.asImageBitmap().also { cache.put(path, it) }
+        val cap = bucket * 5 / 4
+        val bmp = if (side > cap) android.graphics.Bitmap.createScaledBitmap(raw, raw.width * cap / side, raw.height * cap / side, true) else raw
+        cache.put("$path#$bucket", bmp)
+        return bmp
     }
 }
 
 @Composable
-fun WallThumb(path: String, modifier: Modifier, video: Boolean = false) {   // also used by the file list rows and the category tiles
+fun WallThumb(path: String, modifier: Modifier, video: Boolean = false, sizeDp: Int = 64) {   // also used by the file list, the category tiles and the photo views
     val cr = LocalContext.current.contentResolver
-    val bmp by produceState<ImageBitmap?>(WallThumbs.cache.get(path), path) {
-        if (value == null) value = withContext(Dispatchers.IO) { WallThumbs.permits.withPermit { WallThumbs.load(cr, path, video) } }
+    val bucket = WallThumbs.bucket(sizeDp, LocalDensity.current.density)
+    val key = "$path#$bucket"
+    val bmp by produceState<ImageBitmap?>(WallThumbs.cache.get(key)?.asImageBitmap(), key) {
+        if (value == null) value = withContext(Dispatchers.IO) { WallThumbs.permits.withPermit { WallThumbs.load(cr, path, video, bucket)?.asImageBitmap() } }
     }
     val b = bmp
     if (b != null) Image(b, null, modifier, contentScale = ContentScale.Crop) else Box(modifier.background(Color.LightGray))

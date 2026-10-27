@@ -47,7 +47,7 @@ fun PhotoTimeMachineScreen(vm: AppViewModel, onBack: () -> Unit) {
     }
     val thumbDp by vm.thumbDp.collectAsState()
     val screenW = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
-    val cols = ((screenW - 16) / (thumbDp + 4)).coerceAtLeast(2)
+    val cols = ((screenW - 16) / (thumbDp + 4)).coerceAtLeast(1)
     val flat = remember(sections, cols) {
         sections?.let { list ->
             val out = ArrayList<TItem>()
@@ -113,7 +113,7 @@ fun PhotoTimeMachineScreen(vm: AppViewModel, onBack: () -> Unit) {
                     when (it) {
                         is TItem.Header -> Text("${it.label} · ${it.count}", Modifier.padding(start = 4.dp, top = 14.dp, bottom = 6.dp), style = MaterialTheme.typography.titleMedium)
                         is TItem.Photos -> Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            it.photos.forEach { p -> WallThumb(p.path, Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(6.dp)).clickable { open(p) }) }
+                            it.photos.forEach { p -> WallThumb(p.path, Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(6.dp)).clickable { open(p) }, sizeDp = (screenW - 16) / cols) }
                             repeat(cols - it.photos.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }

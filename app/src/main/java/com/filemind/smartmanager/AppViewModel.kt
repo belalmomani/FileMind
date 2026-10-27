@@ -45,11 +45,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Photo thumbnail size (dp) shared by every photo view: changes live while the slider moves, saved when the finger lifts. */
     val thumbDp = MutableStateFlow(96)
-    fun setThumbDpLive(v: Int) { thumbDp.value = v.coerceIn(56, 200) }
+    val photoGrid = MutableStateFlow(false)
+    fun setThumbDpLive(v: Int) { thumbDp.value = v.coerceIn(56, 2000) }
+    fun setPhotoGrid(v: Boolean) { photoGrid.value = v; viewModelScope.launch { settings.setPhotoGrid(v) } }
     fun saveThumbDp() = viewModelScope.launch { settings.setPhotoThumbDp(thumbDp.value) }
 
     init {
-        viewModelScope.launch { thumbDp.value = settings.photoThumbDp.first() }
+        viewModelScope.launch { thumbDp.value = settings.photoThumbDp.first(); photoGrid.value = settings.photoGrid.first() }
         // Auto-purge of expired trash (only trashed items with a known deletion time; never anything else).
         viewModelScope.launch(Dispatchers.IO) {
             kotlinx.coroutines.delay(5000)

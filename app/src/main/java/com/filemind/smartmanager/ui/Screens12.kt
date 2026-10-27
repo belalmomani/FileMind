@@ -216,7 +216,7 @@ private fun MapBody(vm: AppViewModel, req: WallRequest?, onBack: () -> Unit) {
             )
             if (panel.isNotEmpty()) ThumbSizeBar(vm)
             if (panel.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-                items(panel.take(300), key = { it.path }) { p -> WallThumb(p.path, Modifier.size(thumbDp.coerceIn(56, 140).dp).clip(RoundedCornerShape(8.dp)).clickable { open(p) }) }
+                items(panel.take(300), key = { it.path }) { p -> WallThumb(p.path, Modifier.size(thumbDp.coerceIn(56, 260).dp).clip(RoundedCornerShape(8.dp)).clickable { open(p) }, sizeDp = thumbDp.coerceIn(56, 260)) }
             }
             if (unread > 0 && progress == null) Text("تعذرت قراءة بيانات الموقع من $unread صورة (لا يُعدّ هذا «بدون موقع»).", style = MaterialTheme.typography.labelSmall)
             Text("كل المعالجة على جهازك. لا تُرسَل المواقع إلى أي خدمة.", style = MaterialTheme.typography.labelSmall)

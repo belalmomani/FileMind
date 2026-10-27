@@ -94,7 +94,7 @@ fun ColorExplorerScreen(vm: AppViewModel, onBack: () -> Unit) {
             GridCells.Adaptive(thumbDp.dp), Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            items(shown, key = { it.path }) { p -> WallThumb(p.path, Modifier.aspectRatio(1f).clip(RoundedCornerShape(6.dp)).clickable { open(p) }) }
+            items(shown, key = { it.path }) { p -> WallThumb(p.path, Modifier.aspectRatio(1f).clip(RoundedCornerShape(6.dp)).clickable { open(p) }, sizeDp = thumbDp) }
         }
         ThumbSizeBar(vm)
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {

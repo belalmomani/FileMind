@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +54,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
     val selEntries = visible.filter { it.path in selected }
     val showThumbs by vm.settings.showThumbs.collectAsState(initial = true)
     val thumbDp by vm.thumbDp.collectAsState()
+    val gridMode by vm.photoGrid.collectAsState()
     val askBeforeDelete by vm.settings.confirmDelete.collectAsState(initial = true)
     var confirmDelete by remember { mutableStateOf(false) }
     var pendingMove by remember { mutableStateOf(true) }
@@ -163,7 +167,38 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
             msg?.let { Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.primary) }
             if (key.startsWith("CAT_STALE")) Text("لم يتم تعديل هذه الملفات منذ ${key.substringAfterLast('_')} أشهر. هل تريد فتحها أو نقلها أو حذفها أو الاحتفاظ بها؟", Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
             if (visible.isEmpty()) Text("لا توجد ملفات مطابقة. (إن لم تمنح صلاحية أو مجلداً فقد لا تظهر ملفات.)", Modifier.padding(16.dp))
-            if (showThumbs && selected.isEmpty() && visible.any { it.type == FileType.IMAGE }) ThumbSizeBar(vm)
+            if (showThumbs && selected.isEmpty() && visible.any { it.type == FileType.IMAGE }) ThumbSizeBar(vm, showModes = true)
+            if (gridMode && showThumbs && visible.any { it.type == FileType.IMAGE }) {
+                // Grid: thumbnails only, as large as the slider says (up to one photo per row).
+                LazyVerticalGrid(
+                    GridCells.Adaptive(thumbDp.dp), Modifier.weight(1f), contentPadding = PaddingValues(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    gridItems(visible, key = { it.path }) { e ->
+                        val sel = e.path in selected
+                        Box(
+                            Modifier.aspectRatio(1f).clip(RoundedCornerShape(6.dp))
+                                .combinedClickable(
+                                    onClick = { if (selected.isNotEmpty()) { if (sel) selected.remove(e.path) else selected.add(e.path) } else open(e) },
+                                    onLongClick = { if (sel) selected.remove(e.path) else selected.add(e.path) },
+                                ),
+                        ) {
+                            if (e.type == FileType.IMAGE) WallThumb(e.path, Modifier.fillMaxSize(), sizeDp = thumbDp)
+                            else Box(Modifier.fillMaxSize().background(Color(if (e.isHidden) FileType.HIDDEN_ARGB else e.type.argb)).padding(6.dp)) {
+                                Text(e.name, maxLines = 4, color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            }
+                            if (thumbDp >= 140 && e.type == FileType.IMAGE) Text(
+                                e.name, Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Color.Black.copy(alpha = 0.45f)).padding(4.dp),
+                                maxLines = 1, color = Color.White, style = MaterialTheme.typography.labelSmall,
+                            )
+                            if (sel) {
+                                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)))
+                                Text("✓", Modifier.align(Alignment.TopStart).padding(6.dp), color = Color.White)
+                            }
+                        }
+                    }
+                }
+            } else
             LazyColumn(Modifier.weight(1f)) {
                 items(visible, key = { it.path }) { e ->
                     Row(
@@ -174,7 +209,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        if (showThumbs && e.type == FileType.IMAGE) WallThumb(e.path, Modifier.size((thumbDp / 2).coerceIn(40, 100).dp).clip(RoundedCornerShape(6.dp)))
+                        if (showThumbs && e.type == FileType.IMAGE) WallThumb(e.path, Modifier.size((thumbDp / 2).coerceIn(40, 180).dp).clip(RoundedCornerShape(6.dp)), sizeDp = (thumbDp / 2).coerceIn(40, 180))
                         else Box(Modifier.size(14.dp).clip(CircleShape).background(Color(if (e.isHidden) FileType.HIDDEN_ARGB else e.type.argb)))
                         Column(Modifier.weight(1f)) {
                             Text(e.name, maxLines = 1, style = MaterialTheme.typography.bodyLarge)

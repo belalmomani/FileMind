@@ -205,7 +205,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
                 val cover = covers[c]
                 Box(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(c.argb).copy(alpha = 0.85f)).clickable { openCategory(c) }.fillMaxWidth().heightIn(min = 110.dp)) {
                     if (showThumbs && cover != null && c != Category.HIDDEN) {
-                        WallThumb(cover.path, Modifier.matchParentSize(), video = cover.type == FileType.VIDEO)
+                        WallThumb(cover.path, Modifier.matchParentSize(), video = cover.type == FileType.VIDEO, sizeDp = 160)
                         Box(Modifier.matchParentSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.10f), Color.Black.copy(alpha = 0.65f)))))
                     }
                     Column(Modifier.padding(12.dp)) {
