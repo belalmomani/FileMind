@@ -11,31 +11,27 @@ import com.filemind.smartmanager.AppViewModel
 import kotlin.math.roundToInt
 
 /**
- * Manual photo-size control: drag to shrink or enlarge, all the way up to ONE photo per row. Photos change live while dragging and the size is SAVED
- * automatically when the finger lifts. With [showModes] it also offers the List / Grid choice (saved too).
+ * Manual photo-size control in ONE tidy row: small icon, slider, large icon, value. Drag to shrink or enlarge, up to one photo per row; photos change
+ * live and the size is SAVED automatically when the finger lifts.
  */
 @Composable
-fun ThumbSizeBar(vm: AppViewModel, modifier: Modifier = Modifier, showModes: Boolean = false) {
+fun ThumbSizeBar(vm: AppViewModel, modifier: Modifier = Modifier) {
     val size by vm.thumbDp.collectAsState()
-    val grid by vm.photoGrid.collectAsState()
     val maxDp = (LocalConfiguration.current.screenWidthDp - 8).coerceAtLeast(120)   // full row width
     var saved by remember { mutableStateOf(false) }
-    Column(modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        if (showModes) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            FilterChip(!grid, { vm.setPhotoGrid(false) }, { Text("قائمة") })
-            FilterChip(grid, { vm.setPhotoGrid(true) }, { Text("شبكة") })
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("صغيرة", style = MaterialTheme.typography.labelSmall)
-            Slider(
-                value = size.coerceIn(56, maxDp).toFloat(),
-                onValueChange = { saved = false; vm.setThumbDpLive(it.roundToInt()) },
-                onValueChangeFinished = { vm.saveThumbDp(); saved = true },
-                valueRange = 56f..maxDp.toFloat(),
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-            )
-            Text("كبيرة", style = MaterialTheme.typography.labelSmall)
-            Text(if (saved) "  حُفظ ✓" else if (size >= maxDp) "  صورة بكل صف" else "  ${size}dp", style = MaterialTheme.typography.labelSmall)
-        }
+    Row(modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("▫", style = MaterialTheme.typography.titleSmall)
+        Slider(
+            value = size.coerceIn(56, maxDp).toFloat(),
+            onValueChange = { saved = false; vm.setThumbDpLive(it.roundToInt()) },
+            onValueChangeFinished = { vm.saveThumbDp(); saved = true },
+            valueRange = 56f..maxDp.toFloat(),
+            modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+        )
+        Text("▣", style = MaterialTheme.typography.titleMedium)
+        Text(
+            if (saved) "✓ حُفظ" else if (size >= maxDp) "كامل" else "$size",
+            Modifier.width(56.dp).padding(start = 6.dp), style = MaterialTheme.typography.labelSmall, maxLines = 1,
+        )
     }
 }

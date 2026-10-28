@@ -6,7 +6,56 @@ import java.util.Calendar
 import java.util.TimeZone
 
 enum class Combine { AND, OR }
-enum class SortBy { NAME, SIZE, MODIFIED }
+enum class SortBy { NAME, SIZE, MODIFIED, TYPE }
+
+/** What a comparator needs from any listed item (file, folder entry, trashed item...). */
+class SortKey(val name: String, val size: Long, val modifiedMs: Long?, val ext: String)
+
+/** The eight orderings offered in every list ("Sort by" sheet). Items with an unknown date always go last, in both directions. */
+enum class SortOrder(val label: String, val shortLabel: String, val by: SortBy, val desc: Boolean) {
+    NAME_ASC("اسم الملف (من الألف للياء)", "الاسم ↑", SortBy.NAME, false),
+    NAME_DESC("اسم الملف (من الياء للألف)", "الاسم ↓", SortBy.NAME, true),
+    DATE_DESC("تاريخ التعديل (الأحدث أولاً)", "الأحدث أولاً", SortBy.MODIFIED, true),
+    DATE_ASC("تاريخ التعديل (الأقدم أولاً)", "الأقدم أولاً", SortBy.MODIFIED, false),
+    TYPE_ASC("النوع (من الألف إلى الياء)", "النوع ↑", SortBy.TYPE, false),
+    TYPE_DESC("النوع (من الياء إلى الألف)", "النوع ↓", SortBy.TYPE, true),
+    SIZE_DESC("الحجم (الأكبر أولاً)", "الأكبر أولاً", SortBy.SIZE, true),
+    SIZE_ASC("الحجم (الأصغر أولاً)", "الأصغر أولاً", SortBy.SIZE, false);
+
+    fun comparator(): Comparator<SortKey> = Comparator { a, b ->
+        when (by) {
+            SortBy.MODIFIED -> {
+                val x = a.modifiedMs; val y = b.modifiedMs
+                when {
+                    x == null && y == null -> a.name.lowercase().compareTo(b.name.lowercase())
+                    x == null -> 1
+                    y == null -> -1
+                    else -> x.compareTo(y).let { if (desc) -it else it }
+                }
+            }
+            else -> {
+                val c = when (by) {
+                    SortBy.NAME -> a.name.lowercase().compareTo(b.name.lowercase())
+                    SortBy.SIZE -> a.size.compareTo(b.size)
+                    else -> { val t = a.ext.lowercase().compareTo(b.ext.lowercase()); if (t != 0) t else a.name.lowercase().compareTo(b.name.lowercase()) }
+                }
+                if (desc) -c else c
+            }
+        }
+    }
+
+    companion object {
+        fun of(by: SortBy, desc: Boolean): SortOrder = entries.first { it.by == by && it.desc == desc }
+        fun fromName(name: String?, default: SortOrder): SortOrder = entries.firstOrNull { it.name == name } ?: default
+    }
+}
+
+private fun FileEntry.sortKey() = SortKey(name, size, modifiedMs, extension ?: "")
+
+fun List<FileEntry>.sortedByOrder(o: SortOrder): List<FileEntry> {
+    val c = o.comparator()
+    return sortedWith { a, b -> c.compare(a.sortKey(), b.sortKey()) }
+}
 
 data class FileFilter(
     val query: String = "",
@@ -51,13 +100,7 @@ data class FileFilter(
     }
 
     fun apply(list: List<FileEntry>): List<FileEntry> {
-        val f = list.filter(::matches)
-        val cmp: Comparator<FileEntry> = when (sortBy) {
-            SortBy.NAME -> compareBy { it.name.lowercase() }
-            SortBy.SIZE -> compareBy { it.size }
-            SortBy.MODIFIED -> compareBy { it.modifiedMs ?: Long.MIN_VALUE }
-        }
-        return f.sortedWith(if (descending) cmp.reversed() else cmp)
+        return list.filter(::matches).sortedByOrder(SortOrder.of(sortBy, descending))
     }
 
     /** Human-readable summary of active conditions (shown before any bulk action). */

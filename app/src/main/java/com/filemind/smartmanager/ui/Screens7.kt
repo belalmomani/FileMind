@@ -67,7 +67,9 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
     var stack by remember { mutableStateOf(listOf<Loc>()) }
     var result by remember { mutableStateOf<FolderLister.Result?>(null) }
     var reload by remember { mutableStateOf(0) }
-    var sortBy by remember { mutableStateOf(SortBy.NAME) }
+    val sortName by vm.settings.browserSort.collectAsState(initial = SortOrder.NAME_ASC.name)
+    val sortOrder = SortOrder.fromName(sortName, SortOrder.NAME_ASC)
+    var showSort by remember { mutableStateOf(false) }
     val selected = remember { mutableStateListOf<String>() }
     var dialog by remember { mutableStateOf("") }
     var textInput by remember { mutableStateOf("") }
@@ -81,16 +83,15 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
     }
     BackHandler(stack.isNotEmpty() || selected.isNotEmpty()) { if (selected.isNotEmpty()) selected.clear() else stack = stack.dropLast(1) }
 
-    val shownItems = remember(result, sortBy, showHidden) {
+    val shownItems = remember(result, sortOrder, showHidden) {
+        val cmp = sortOrder.comparator()
+        // Folders first, then the chosen order.
         result?.items.orEmpty().filter { showHidden || !it.isHidden }.sortedWith(
             compareByDescending<BItem> { it.isDir }.thenComparator { a, b ->
-                when (sortBy) {
-                    SortBy.NAME -> a.name.lowercase().compareTo(b.name.lowercase())
-                    SortBy.SIZE -> b.size.compareTo(a.size)
-                    SortBy.MODIFIED -> (b.modified ?: 0L).compareTo(a.modified ?: 0L)
-                }
+                cmp.compare(SortKey(a.name, a.size, a.modified, a.ext ?: ""), SortKey(b.name, b.size, b.modified, b.ext ?: ""))
             })
     }
+    if (showSort) SortSheet(sortOrder, { scope.launch { vm.settings.setBrowserSort(it.name) } }, { showSort = false })
     val sel = shownItems.filter { it.docId in selected }
 
     fun toggle(i: BItem) { if (i.docId in selected) selected.remove(i.docId) else selected.add(i.docId) }
@@ -184,7 +185,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
             if (cur != null) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(ViewMode.entries.toList()) { m -> FilterChip(viewMode == m, { scope.launch { vm.settings.setBrowserView(m) } }, { Text(when (m) { ViewMode.LIST -> "قائمة"; ViewMode.GRID -> "شبكة"; ViewMode.DETAILS -> "تفاصيل" }) }) }
                 item { FilterChip(showHidden, { scope.launch { vm.settings.setBrowserShowHidden(!showHidden) } }, { Text("المخفية") }) }
-                item { FilterChip(true, { sortBy = SortBy.entries[(sortBy.ordinal + 1) % SortBy.entries.size] }, { Text("فرز: " + when (sortBy) { SortBy.NAME -> "الاسم"; SortBy.SIZE -> "الحجم"; SortBy.MODIFIED -> "التاريخ" }) }) }
+                item { AssistChip({ showSort = true }, { Text("⇅ " + sortOrder.shortLabel) }) }
             }
 
             if (cur == null) {

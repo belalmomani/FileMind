@@ -62,6 +62,7 @@ app/src/main/java/com/filemind/smartmanager/ui/Screens6.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens7.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens8.kt
 app/src/main/java/com/filemind/smartmanager/ui/Screens9.kt
+app/src/main/java/com/filemind/smartmanager/ui/SortSheet.kt
 app/src/main/java/com/filemind/smartmanager/ui/Theme.kt
 app/src/main/java/com/filemind/smartmanager/ui/ThumbSizeBar.kt
 app/src/main/res/mipmap-hdpi/ic_launcher.png
@@ -89,6 +90,7 @@ app/src/test/java/com/filemind/smartmanager/core/MergePlanTest.kt
 app/src/test/java/com/filemind/smartmanager/core/OrganizerNamingTest.kt
 app/src/test/java/com/filemind/smartmanager/core/PerceptualHashTest.kt
 app/src/test/java/com/filemind/smartmanager/core/PhotoTimelineTest.kt
+app/src/test/java/com/filemind/smartmanager/core/SortOrderTest.kt
 app/src/test/java/com/filemind/smartmanager/core/TimelineTest.kt
 app/src/test/java/com/filemind/smartmanager/core/TrashIndexTest.kt
 app/src/test/java/com/filemind/smartmanager/core/WallLayoutTest.kt

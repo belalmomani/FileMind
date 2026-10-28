@@ -127,18 +127,24 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
                 title = { Text(if (selected.isEmpty()) "$title (${visible.size})" else "محدد: ${selected.size}") },
                 navigationIcon = { TextButton(onBack) { Text("رجوع") } },
                 actions = {
-                    if (selected.isEmpty() && visible.any { it.type == FileType.IMAGE }) {
-                        // One "views" menu for the photo-only views (wall / time machine / color explorer) so the top bar stays uncluttered.
-                        var viewsMenu by remember { mutableStateOf(false) }
-                        fun go(open: () -> Unit) {
-                            viewsMenu = false
-                            val imgs = visible.filter { it.type == FileType.IMAGE }
-                            vm.wallRequest = WallRequest(title, imgs.map { WallPhoto(it.path, it.parent, it.exifDateMs ?: it.modifiedMs) })
-                            open()
-                        }
-                        Box {
-                            TextButton({ viewsMenu = true }) { Text("عروض") }
-                            DropdownMenu(viewsMenu, { viewsMenu = false }) {
+                    // One overflow menu instead of several crowded text buttons.
+                    var menu by remember { mutableStateOf(false) }
+                    val hasImages = selected.isEmpty() && visible.any { it.type == FileType.IMAGE }
+                    fun go(open: () -> Unit) {
+                        menu = false
+                        val imgs = visible.filter { it.type == FileType.IMAGE }
+                        vm.wallRequest = WallRequest(title, imgs.map { WallPhoto(it.path, it.parent, it.exifDateMs ?: it.modifiedMs) })
+                        open()
+                    }
+                    Box {
+                        TextButton({ menu = true }) { Text("⋮", style = MaterialTheme.typography.titleLarge) }
+                        DropdownMenu(menu, { menu = false }) {
+                            DropdownMenuItem({ Text(if (visible.isNotEmpty() && selected.size == visible.size) "إلغاء تحديد الكل" else "تحديد الكل") }, {
+                                menu = false
+                                if (selected.size == visible.size) selected.clear() else { selected.clear(); selected.addAll(visible.map { it.path }) }
+                            })
+                            if (hasImages) {
+                                HorizontalDivider()
                                 DropdownMenuItem({ Text("جدار الصور") }, { go(openWall) })
                                 DropdownMenuItem({ Text("رحلة زمنية") }, { go(openTime) })
                                 DropdownMenuItem({ Text("مستكشف الألوان") }, { go(openColors) })
@@ -146,7 +152,6 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
                             }
                         }
                     }
-                    TextButton({ if (selected.size == visible.size) selected.clear() else { selected.clear(); selected.addAll(visible.map { it.path }) } }) { Text("تحديد الكل") }
                 },
             )
         },
@@ -161,13 +166,16 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
         },
     ) { pad ->
         Column(Modifier.padding(pad)) {
-            FilterBar(vm, filter, { filter = it }, onReset = { filter = FileFilter(); vm.resetFilter(key) })
+            FilterBar(
+                vm, filter, { filter = it }, onReset = { filter = FileFilter(); vm.resetFilter(key) },
+                hasImages = showThumbs && visible.any { it.type == FileType.IMAGE }, gridMode = gridMode, onToggleGrid = { vm.setPhotoGrid(!gridMode) },
+            )
             val d = filter.describe()
             if (d.isNotEmpty()) Text("الشروط: " + d.joinToString(" · "), Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
             msg?.let { Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.primary) }
             if (key.startsWith("CAT_STALE")) Text("لم يتم تعديل هذه الملفات منذ ${key.substringAfterLast('_')} أشهر. هل تريد فتحها أو نقلها أو حذفها أو الاحتفاظ بها؟", Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
             if (visible.isEmpty()) Text("لا توجد ملفات مطابقة. (إن لم تمنح صلاحية أو مجلداً فقد لا تظهر ملفات.)", Modifier.padding(16.dp))
-            if (showThumbs && selected.isEmpty() && visible.any { it.type == FileType.IMAGE }) ThumbSizeBar(vm, showModes = true)
+            if (showThumbs && selected.isEmpty() && visible.any { it.type == FileType.IMAGE }) ThumbSizeBar(vm)
             if (gridMode && showThumbs && visible.any { it.type == FileType.IMAGE }) {
                 // Grid: thumbnails only, as large as the slider says (up to one photo per row).
                 LazyVerticalGrid(
@@ -232,29 +240,41 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FilterBar(vm: AppViewModel, f: FileFilter, set: (FileFilter) -> Unit, onReset: () -> Unit) {
+private fun FilterBar(
+    vm: AppViewModel, f: FileFilter, set: (FileFilter) -> Unit, onReset: () -> Unit,
+    hasImages: Boolean, gridMode: Boolean, onToggleGrid: () -> Unit,
+) {
     val now = remember { System.currentTimeMillis() }
     var showSave by remember { mutableStateOf(false) }
     var showList by remember { mutableStateOf(false) }
     var fname by remember { mutableStateOf("") }
     val named by vm.namedFilters.collectAsState()
-    Column(Modifier.padding(horizontal = 12.dp)) {
+    var showSort by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+    val activeCount = f.describe().size
+    Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedTextField(f.query, { set(f.copy(query = it)) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("بحث بالاسم") })
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            item { FilterChip(f.minSize == 5 * MB, { set(f.copy(minSize = if (f.minSize == 5 * MB) null else 5 * MB)) }, { Text("≥ 5MB") }) }
-            item { FilterChip(f.minSize == 100 * MB, { set(f.copy(minSize = if (f.minSize == 100 * MB) null else 100 * MB)) }, { Text("≥ 100MB") }) }
-            item { FilterChip(f.modifiedBeforeMs != null, { set(f.copy(modifiedBeforeMs = if (f.modifiedBeforeMs != null) null else now - 183 * DAY_MS)) }, { Text("قبل 6 أشهر") }) }
-            item { FilterChip(!f.includeHidden, { set(f.copy(includeHidden = !f.includeHidden)) }, { Text("إخفاء المخفية") }) }
-            item { FilterChip(f.onlyNoExtension, { set(f.copy(onlyNoExtension = !f.onlyNoExtension)) }, { Text("بلا امتداد") }) }
-            item { FilterChip(true, { set(f.copy(combine = if (f.combine == Combine.AND) Combine.OR else Combine.AND)) }, { Text(if (f.combine == Combine.AND) "الشروط: AND" else "الشروط: OR") }) }
-            item { FilterChip(true, { set(f.copy(sortBy = SortBy.entries[(f.sortBy.ordinal + 1) % SortBy.entries.size])) }, { Text("فرز: " + when (f.sortBy) { SortBy.NAME -> "الاسم"; SortBy.SIZE -> "الحجم"; SortBy.MODIFIED -> "التاريخ" }) }) }
-            item { FilterChip(true, { set(f.copy(descending = !f.descending)) }, { Text(if (f.descending) "↓ تنازلي" else "↑ تصاعدي") }) }
-            item { FilterChip(f.dateSource == DateSource.EXIF, { set(f.copy(dateSource = if (f.dateSource == DateSource.EXIF) DateSource.MODIFIED else DateSource.EXIF)) }, { Text("تاريخ الالتقاط (EXIF)") }) }
-            item { AssistChip({ showSave = true }, { Text("حفظ الفلتر") }) }
-            item { AssistChip({ showList = true }, { Text("الفلاتر المحفوظة") }) }
-            item { AssistChip(onReset, { Text("إعادة ضبط") }) }
+        // Tidy toolbar: three equal buttons. Sort sheet, list/grid switch (photos), and a collapsible filter panel.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AssistChip({ showSort = true }, { Text("⇅ " + SortOrder.of(f.sortBy, f.descending).shortLabel, maxLines = 1) }, Modifier.weight(1f))
+            if (hasImages) AssistChip(onToggleGrid, { Text(if (gridMode) "☰ قائمة" else "▦ شبكة", maxLines = 1) }, Modifier.weight(1f))
+            AssistChip({ expanded = !expanded }, { Text("⛃ تصفية" + (if (activeCount > 0) " ($activeCount)" else "") + (if (expanded) " ▴" else " ▾"), maxLines = 1) }, Modifier.weight(1f))
         }
-        OutlinedTextField(f.folderContains, { set(f.copy(folderContains = it)) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("المجلد أو المصدر يحتوي…") })
+        if (expanded) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                item { FilterChip(f.minSize == 5 * MB, { set(f.copy(minSize = if (f.minSize == 5 * MB) null else 5 * MB)) }, { Text("≥ 5MB") }) }
+                item { FilterChip(f.minSize == 100 * MB, { set(f.copy(minSize = if (f.minSize == 100 * MB) null else 100 * MB)) }, { Text("≥ 100MB") }) }
+                item { FilterChip(f.modifiedBeforeMs != null, { set(f.copy(modifiedBeforeMs = if (f.modifiedBeforeMs != null) null else now - 183 * DAY_MS)) }, { Text("قبل 6 أشهر") }) }
+                item { FilterChip(!f.includeHidden, { set(f.copy(includeHidden = !f.includeHidden)) }, { Text("إخفاء المخفية") }) }
+                item { FilterChip(f.onlyNoExtension, { set(f.copy(onlyNoExtension = !f.onlyNoExtension)) }, { Text("بلا امتداد") }) }
+                item { FilterChip(true, { set(f.copy(combine = if (f.combine == Combine.AND) Combine.OR else Combine.AND)) }, { Text(if (f.combine == Combine.AND) "الشروط: AND" else "الشروط: OR") }) }
+                item { FilterChip(f.dateSource == DateSource.EXIF, { set(f.copy(dateSource = if (f.dateSource == DateSource.EXIF) DateSource.MODIFIED else DateSource.EXIF)) }, { Text("تاريخ الالتقاط (EXIF)") }) }
+                item { AssistChip({ showSave = true }, { Text("حفظ الفلتر") }) }
+                item { AssistChip({ showList = true }, { Text("الفلاتر المحفوظة") }) }
+                item { AssistChip(onReset, { Text("إعادة ضبط") }) }
+            }
+            OutlinedTextField(f.folderContains, { set(f.copy(folderContains = it)) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("المجلد أو المصدر يحتوي…") })
+        }
         if (showSave) AlertDialog(
             onDismissRequest = { showSave = false }, title = { Text("اسم الفلتر (نفس الاسم يستبدل المحفوظ)") },
             text = { OutlinedTextField(fname, { fname = it }, singleLine = true) },
@@ -278,4 +298,5 @@ private fun FilterBar(vm: AppViewModel, f: FileFilter, set: (FileFilter) -> Unit
             confirmButton = { TextButton({ showList = false }) { Text("إغلاق") } },
         )
     }
+    if (showSort) SortSheet(SortOrder.of(f.sortBy, f.descending), { set(f.copy(sortBy = it.by, descending = it.desc)) }, { showSort = false })
 }

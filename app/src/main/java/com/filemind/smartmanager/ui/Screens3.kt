@@ -15,7 +15,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.filemind.smartmanager.AppViewModel
+import kotlinx.coroutines.launch
 import com.filemind.smartmanager.core.FileType
+import com.filemind.smartmanager.core.SortOrder
+import com.filemind.smartmanager.core.sortedByOrder
 
 @Composable
 fun ArchivesScreen(vm: AppViewModel, onBack: () -> Unit) {
@@ -27,10 +30,16 @@ fun ArchivesScreen(vm: AppViewModel, onBack: () -> Unit) {
 @Composable
 private fun ArchiveList(vm: AppViewModel, onBack: () -> Unit) {
     val files by vm.files.collectAsState()
-    val archives = remember(files) { files.filter { it.type == FileType.ARCHIVE }.sortedByDescending { it.modifiedMs ?: 0L } }
+    val sortName by vm.settings.listSort.collectAsState(initial = SortOrder.DATE_DESC.name)
+    val sortOrder = SortOrder.fromName(sortName, SortOrder.DATE_DESC)
+    var showSort by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val archives = remember(files, sortOrder) { files.filter { it.type == FileType.ARCHIVE }.sortedByOrder(sortOrder) }
+    if (showSort) SortSheet(sortOrder, { scope.launch { vm.settings.setListSort(it.name) } }, { showSort = false })
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         TextButton(onBack) { Text("رجوع") }
         Text("مختبر الأرشيفات", style = MaterialTheme.typography.titleLarge)
+        AssistChip({ showSort = true }, { Text("⇅ " + sortOrder.shortLabel) })
         Text("ZIP: عرض واستخراج آمن وإنشاء من المتصفح. 7Z وRAR: عرض المحتويات والبحث فقط (بلا استخراج). RAR5 والأرشيفات المحمية بكلمة مرور غير مدعومة. لا يُحذف أي أرشيف.", style = MaterialTheme.typography.bodySmall)
         // TODO: RAR/7Z extraction, archive-vs-archive comparison.
         if (archives.isEmpty()) Text("لا توجد أرشيفات في الملفات المفحوصة. أضف مجلداً من الشاشة الرئيسية.", Modifier.padding(16.dp))

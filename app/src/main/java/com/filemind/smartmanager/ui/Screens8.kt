@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.filemind.smartmanager.AppViewModel
+import com.filemind.smartmanager.core.SortKey
+import com.filemind.smartmanager.core.SortOrder
 import com.filemind.smartmanager.data.TrashStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -26,6 +28,15 @@ fun TrashScreen(vm: AppViewModel, onBack: () -> Unit) {
     var reload by remember { mutableStateOf(0) }
     var msg by remember { mutableStateOf<String?>(null) }
     var confirmEmpty by remember { mutableStateOf(false) }
+    val sortName by vm.settings.listSort.collectAsState(initial = SortOrder.DATE_DESC.name)
+    val sortOrder = SortOrder.fromName(sortName, SortOrder.DATE_DESC)
+    var showSort by remember { mutableStateOf(false) }
+    val sortedItems = remember(trashItems, sortOrder) {
+        val cmp = sortOrder.comparator()
+        fun key(i: TrashStore.Item) = SortKey(i.record.name, i.record.size, i.record.deletedAtMs.takeIf { it > 0 }, i.record.name.substringAfterLast('.', ""))
+        trashItems?.sortedWith { a, b -> cmp.compare(key(a), key(b)) }
+    }
+    if (showSort) SortSheet(sortOrder, { scope.launch { vm.settings.setListSort(it.name) } }, { showSort = false })
     var confirmOne by remember { mutableStateOf<TrashStore.Item?>(null) }
 
     LaunchedEffect(roots, reload) { trashItems = null; trashItems = withContext(Dispatchers.IO) { TrashStore.list(cr, roots) } }
@@ -51,6 +62,7 @@ fun TrashScreen(vm: AppViewModel, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onBack) { Text("رجوع") }; Spacer(Modifier.weight(1f))
+            TextButton({ showSort = true }) { Text("⇅ " + sortOrder.shortLabel) }
             TextButton({ confirmEmpty = true }, enabled = !trashItems.isNullOrEmpty()) { Text("إفراغ السلة") }
         }
         Text("السلة", style = MaterialTheme.typography.titleLarge)
@@ -61,7 +73,7 @@ fun TrashScreen(vm: AppViewModel, onBack: () -> Unit) {
         )
         Text("لا تُنقل إلى السلة إلا الملفات داخل مجلدات منحتَ التطبيق وصولاً إليها (إضافة مجلد). غيرها يُحذف بنافذة تأكيد النظام ولا يمكن استرجاعه.", style = MaterialTheme.typography.bodySmall)
         msg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-        val list = trashItems
+        val list = sortedItems
         when {
             list == null -> Text("جارٍ القراءة…")
             list.isEmpty() -> Text("السلة فارغة.", Modifier.padding(16.dp))
