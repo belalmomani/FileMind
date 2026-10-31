@@ -29,6 +29,7 @@ app/src/main/java/com/filemind/smartmanager/core/SourceComparer.kt
 app/src/main/java/com/filemind/smartmanager/core/Timeline.kt
 app/src/main/java/com/filemind/smartmanager/core/TrashIndex.kt
 app/src/main/java/com/filemind/smartmanager/core/Treemap.kt
+app/src/main/java/com/filemind/smartmanager/core/UsageStats.kt
 app/src/main/java/com/filemind/smartmanager/core/WallLayout.kt
 app/src/main/java/com/filemind/smartmanager/core/ZipLab.kt
 app/src/main/java/com/filemind/smartmanager/core/ZipMaker.kt
@@ -45,6 +46,7 @@ app/src/main/java/com/filemind/smartmanager/data/SafTransfer.kt
 app/src/main/java/com/filemind/smartmanager/data/Scanners.kt
 app/src/main/java/com/filemind/smartmanager/data/Settings.kt
 app/src/main/java/com/filemind/smartmanager/data/TrashStore.kt
+app/src/main/java/com/filemind/smartmanager/data/UsageStore.kt
 app/src/main/java/com/filemind/smartmanager/data/db/Db.kt
 app/src/main/java/com/filemind/smartmanager/ui/ConflictDialog.kt
 app/src/main/java/com/filemind/smartmanager/ui/FileListScreen.kt
@@ -93,6 +95,7 @@ app/src/test/java/com/filemind/smartmanager/core/PhotoTimelineTest.kt
 app/src/test/java/com/filemind/smartmanager/core/SortOrderTest.kt
 app/src/test/java/com/filemind/smartmanager/core/TimelineTest.kt
 app/src/test/java/com/filemind/smartmanager/core/TrashIndexTest.kt
+app/src/test/java/com/filemind/smartmanager/core/UsageStatsTest.kt
 app/src/test/java/com/filemind/smartmanager/core/WallLayoutTest.kt
 app/src/test/java/com/filemind/smartmanager/core/ZipMakerTest.kt
 build.gradle.kts

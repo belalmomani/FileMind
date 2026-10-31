@@ -1,5 +1,8 @@
 package com.filemind.smartmanager.ui
 
+import com.filemind.smartmanager.core.FileEntry
+import com.filemind.smartmanager.core.SortOrder
+import com.filemind.smartmanager.core.SortKey
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,7 +23,13 @@ fun TimelineScreen(vm: AppViewModel, openMonth: (String, (FileEntry, Long) -> Bo
     val files by vm.files.collectAsState()
     var source by remember { mutableStateOf(DateSource.MODIFIED) }
     val result = remember(files, source) { Timeline.build(files, source) }
-    val byYear = remember(result) { result.months.groupBy { it.year } }
+    val sort = rememberScreenSort(vm, "timeline", SortOrder.DATE_DESC, listOf(SortOrder.DATE_DESC, SortOrder.DATE_ASC, SortOrder.SIZE_DESC, SortOrder.SIZE_ASC))
+    val byYear = remember(result, sort.order) {
+        val cmp = sort.order.comparator()
+        result.months.sortedWith { a, b ->
+            cmp.compare(SortKey("%d-%02d".format(a.year, a.month), a.size, Timeline.monthRange(a.year, a.month).first, ""), SortKey("%d-%02d".format(b.year, b.month), b.size, Timeline.monthRange(b.year, b.month).first, ""))
+        }.groupBy { it.year }
+    }
 
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item {
@@ -31,6 +40,7 @@ fun TimelineScreen(vm: AppViewModel, openMonth: (String, (FileEntry, Long) -> Bo
                 FilterChip(source == DateSource.EXIF, { source = DateSource.EXIF }, { Text("تاريخ الالتقاط (EXIF)") })
             }
             Text(if (source == DateSource.EXIF) "الملفات بلا تاريخ التقاط تظهر في «تاريخ غير معروف» ولا يُخترع لها تاريخ." else "تاريخ التعديل ليس بالضرورة تاريخ إنشاء المحتوى.", style = MaterialTheme.typography.bodySmall)
+            SortChip(sort)
             if (result.months.isEmpty() && result.unknown.isEmpty()) Text("لا توجد ملفات مفحوصة بعد.")
         }
         byYear.forEach { (year, ms) ->

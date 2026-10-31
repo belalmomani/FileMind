@@ -1,5 +1,7 @@
 package com.filemind.smartmanager.ui
 
+import com.filemind.smartmanager.core.SortOrder
+import com.filemind.smartmanager.core.SortKey
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -60,6 +62,7 @@ fun CompareScreen(vm: AppViewModel, onBack: () -> Unit) {
     val zb = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u -> if (u != null) b = zip(u) }
 
     val rows = res?.rows.orEmpty()
+    val sort = rememberScreenSort(vm, "compare", SortOrder.NAME_ASC, NO_TYPE_ORDERS)
     val counts = remember(rows) { rows.groupingBy { it.status }.eachCount() }
 
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -96,12 +99,19 @@ fun CompareScreen(vm: AppViewModel, onBack: () -> Unit) {
                         if (onlyB > 0) OutlinedButton({ confirmCopyFromA = false }, enabled = !busy) { Text("انسخ $onlyB ملفاً من الثاني إلى الأول") }
                     } else Text("التنفيذ متاح بين مجلدين فقط؛ الأرشيفات والمراجع للمعاينة.", style = MaterialTheme.typography.bodySmall)
                 } }
+                SortChip(sort)
                 androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(CompareStatus.entries.toList()) { st -> FilterChip(st in show, { show = if (st in show) show - st else show + st }, { Text(statusLabel(st, missingMode)) }) }
                 }
             }
         }
-        items(rows.filter { it.status in show }.take(500), key = { it.path }) { r ->
+        items(
+            rows.filter { it.status in show }.sortedWith { a, b ->
+                val cmp = sort.order.comparator()
+                cmp.compare(SortKey(a.path, a.a?.size ?: a.b?.size ?: 0L, a.a?.modifiedMs ?: a.b?.modifiedMs, ""), SortKey(b.path, b.a?.size ?: b.b?.size ?: 0L, b.a?.modifiedMs ?: b.b?.modifiedMs, ""))
+            }.take(500),
+            key = { it.path },
+        ) { r ->
             Column(Modifier.fillMaxWidth()) {
                 Text(r.path, maxLines = 1)
                 Text(statusLabel(r.status, missingMode) + (r.a?.let { " · أ: ${fmtSize(it.size)}" } ?: "") + (r.b?.let { " · ب: ${fmtSize(it.size)}" } ?: ""), style = MaterialTheme.typography.bodySmall)

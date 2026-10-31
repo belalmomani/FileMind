@@ -6,6 +6,26 @@ import java.util.TimeZone
 enum class DateSource { MODIFIED, EXIF, NAME }
 enum class GroupBy { NAME, YEAR, YEAR_MONTH, EXTENSION, TYPE }
 
+/** How month folders are named. Names, never numbers: "يناير" or the Levant calendar names "كانون الثاني". */
+enum class MonthStyle(val titleAr: String, val names: List<String>) {
+    STANDARD("يناير، فبراير، مارس…", listOf("يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر")),
+    LEVANT("كانون الثاني، شباط، آذار…", listOf("كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول"));
+
+    companion object { fun fromName(n: String?): MonthStyle = entries.firstOrNull { it.name == n } ?: STANDARD }
+}
+
+/** The word that names a kind of file inside folder names: "صور 2025", "فيديو 2025". */
+fun FileType.folderWord(): String = when (this) {
+    FileType.IMAGE -> "صور"
+    FileType.VIDEO -> "فيديو"
+    FileType.AUDIO -> "صوتيات"
+    FileType.PDF -> "PDF"
+    FileType.DOCUMENT -> "مستندات"
+    FileType.ARCHIVE -> "أرشيفات"
+    FileType.APK -> "تطبيقات"
+    FileType.UNKNOWN -> "ملفات"
+}
+
 data class OrganizeRule(
     val types: Set<FileType>,
     val primary: GroupBy,
@@ -13,6 +33,7 @@ data class OrganizeRule(
     val dateSource: DateSource = DateSource.MODIFIED,
     val destRoot: String,
     val unknownDateFolder: String? = "تاريخ غير معروف", // null => skip files with unknown date
+    val monthStyle: MonthStyle = MonthStyle.STANDARD,
 )
 
 data class PlannedMove(val entry: FileEntry, val targetDir: String, val reason: String? = null)
@@ -20,7 +41,6 @@ data class OrganizePlan(val moves: List<PlannedMove>, val skipped: List<PlannedM
 
 object Organizer {
     const val NUMERIC_NAMES_FOLDER = "أسماء رقمية"
-    const val MONTH_PREFIX = "شهر"
 
     private val yearInName = Regex("(?<!\\d)(19|20)\\d{2}(?!\\d)")
 
@@ -42,11 +62,13 @@ object Organizer {
             if (k.any { it.isLetter() }) k else NUMERIC_NAMES_FOLDER   // TODO: smarter grouping of numeric names (by date prefix) if wanted
         }
         GroupBy.EXTENSION -> e.extension ?: "بدون_امتداد"
-        GroupBy.TYPE -> e.type.name
+        GroupBy.TYPE -> e.type.folderWord()
         GroupBy.YEAR, GroupBy.YEAR_MONTH -> dateOf(e, rule.dateSource)?.let {
             val c = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
-            if (g == GroupBy.YEAR) "${c.get(Calendar.YEAR)}"
-            else "${c.get(Calendar.YEAR)}/$MONTH_PREFIX ${"%02d".format(c.get(Calendar.MONTH) + 1)}"   // 2025/شهر 01 … 2025/شهر 12 (sorts correctly)
+            val year = c.get(Calendar.YEAR)
+            // As the main grouping the folder names WHAT it holds before the date: "صور 2025", "فيديو 2025". Under another grouping the plain year is enough.
+            val head = if (g == rule.primary) "${e.type.folderWord()} $year" else "$year"
+            if (g == GroupBy.YEAR) head else "$head/${rule.monthStyle.names[c.get(Calendar.MONTH)]}"
         }
     }
 

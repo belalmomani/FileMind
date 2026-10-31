@@ -1,5 +1,10 @@
 package com.filemind.smartmanager.ui
 
+import com.filemind.smartmanager.UsedFile
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import com.filemind.smartmanager.core.SortOrder
+import com.filemind.smartmanager.core.SortKey
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -23,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -54,6 +61,19 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     var showRationale by remember { mutableStateOf(false) }
     var ask by remember { mutableStateOf("") }
     var askMsg by remember { mutableStateOf<String?>(null) }
+    val mostUsed by vm.mostUsed.collectAsState()
+    var showAsk by remember { mutableStateOf(false) }
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+    androidx.activity.compose.BackHandler(enabled = drawer.isOpen) { drawerScope.launch { drawer.close() } }
+    LaunchedEffect(Unit) { vm.refreshMostUsed() }
+    fun openUsed(f: UsedFile) {
+        vm.recordOpen(f.path)
+        val uri = android.net.Uri.parse(f.path)
+        val mime = ctx.contentResolver.getType(uri) ?: android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.name.substringAfterLast('.', "").lowercase()) ?: "*/*"
+        try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (e: Exception) { vm.message.value = "لا يوجد تطبيق لفتح هذا الملف" }
+    }
     val gridCols by vm.settings.gridColumns.collectAsState(initial = 0)
     // Removable volumes (USB OTG / SD card) detected through StorageManager; access still needs the user's folder grant (SAF).
     val storageManager = remember { ctx.getSystemService(android.content.Context.STORAGE_SERVICE) as android.os.storage.StorageManager }
@@ -128,27 +148,38 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     }
 
     // One scrollable grid: header (search, status, buttons) spans the full width, then the category tiles. Nothing is hidden on small screens.
-    LazyVerticalGrid(GridCells.Fixed(if (gridCols > 0) gridCols else 2), Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val drawerItems = listOf(
+        HomeEntry("اسأل ملفاتك", "🔍", Color.Unspecified, Color.Unspecified) { showAsk = true },
+        HomeEntry("العمليات", "📋", Color.Unspecified, Color.Unspecified, openOps),
+        HomeEntry("الأرشيفات", "📦", Color.Unspecified, Color.Unspecified, openArchives),
+        HomeEntry("الإعدادات", "⚙️", Color.Unspecified, Color.Unspecified, openSettings),
+        HomeEntry("السلة", "🗑️", Color.Unspecified, Color.Unspecified, openTrash),
+    )
+    val topActions = listOf(
+        HomeEntry("آلة الزمن", "⏳", Color.Unspecified, Color.Unspecified, openTimeline),
+        HomeEntry("المكررات", "📑", Color.Unspecified, Color.Unspecified, openDuplicates),
+        HomeEntry("مقارنة", "⚖️", Color.Unspecified, Color.Unspecified, openCompare),
+    )
+    ModalNavigationDrawer(
+        drawerState = drawer,
+        drawerContent = {
+            ModalDrawerSheet {
+                Text("FileMind", Modifier.padding(horizontal = 24.dp, vertical = 20.dp), style = MaterialTheme.typography.headlineSmall)
+                HorizontalDivider()
+                drawerItems.forEach { d ->
+                    NavigationDrawerItem(
+                        label = { Text(d.label) }, icon = { Text(d.glyph, fontSize = 20.sp) }, selected = false,
+                        onClick = { drawerScope.launch { drawer.close() }; d.onClick() },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                    )
+                }
+            }
+        },
+    ) {
+    Column(Modifier.fillMaxSize()) {
+    HomeTopBar(onMenu = { drawerScope.launch { drawer.open() } }, actions = topActions)
+    LazyVerticalGrid(GridCells.Fixed(if (gridCols > 0) gridCols else 2), Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item(span = { GridItemSpan(maxLineSpan) }) { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("FileMind", style = MaterialTheme.typography.headlineMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(ask, { ask = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("اسأل ملفاتك: مثل «اعرض كل ملفات ZIP من سنة 2025»") })
-            TextButton({
-                try {
-                    voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar"))
-                } catch (e: Exception) { askMsg = "التعرف الصوتي غير متاح على هذا الجهاز" }
-            }) { Text("🎤") }
-            Button({
-                val q = ArabicQueryParser.parse(ask)
-                if (q.isConfident) { askMsg = null; openQuery(ask, q.toFileFilter(System.currentTimeMillis())) }
-                else askMsg = if (q.unrecognized.isEmpty()) "لم أفهم الطلب. وضّح النوع أو الحجم أو السنة." else "لم أفهم: " + q.unrecognized.joinToString(" ") + " — وضّح المقصود."
-            }) { Text("اسأل") }
-        }
-        askMsg?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        // TODO: voice command button (SpeechRecognizer) wired to the same ArabicQueryParser; never run destructive actions from voice without confirmation.
-
         if (!granted) Card { Column(Modifier.padding(12.dp)) {
             Text("لعرض الصور والفيديو والصوتيات في التصنيفات نحتاج إذن قراءة الوسائط. لن تُرفع ملفاتك لأي خادم.")
             TextButton({ showRationale = true }) { Text("منح الإذن") }
@@ -181,25 +212,18 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
         Text("${files.size} ملف · ${fmtSize(totalSize)} · ${roots.size} مجلد مضاف" + if (failed.isNotEmpty()) " · تعذر فحص ${failed.size} مجلد" else "", style = MaterialTheme.typography.bodySmall)
         indexTime?.let { Text("الفهرس المحلي (نسخة مخبأة قد تكون قديمة) محدّث: ${fmtDate(it)}" + if (scanning) " — جارٍ التحديث…" else "", style = MaterialTheme.typography.bodySmall) }
         if (failed.isNotEmpty()) Text("المجلدات التي تعذر فحصها غير محسوبة (لا تُعتبر فارغة).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HomeButton("المتصفح", openBrowser, Modifier.weight(1f))
-            HomeButton("المجلدات", openFolders, Modifier.weight(1f))
-            HomeButton("العمليات", openOps, Modifier.weight(1f))
+        if (mostUsed.isNotEmpty()) {
+            Text("الأكثر استخداماً", style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                mostUsed.forEach { f -> UsedFileCard(f) { openUsed(f) } }
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HomeButton("التخزين", openStorage, Modifier.weight(1f))
-            HomeButton("التنظيم", openOrganizer, Modifier.weight(1f))
-            HomeButton("المكررات", openDuplicates, Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HomeButton("الأرشيفات", openArchives, Modifier.weight(1f))
-            HomeButton("آلة الزمن", openTimeline, Modifier.weight(1f))
-            HomeButton("مقارنة / مفقود", openCompare, Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HomeButton("السلة", openTrash, Modifier.weight(1f))
-            HomeButton("الإعدادات", openSettings, Modifier.weight(1f))
-        }
+        HomeIconGrid(listOf(
+            HomeEntry("المتصفح", "📂", Color(0xFFFFB74D), Color(0xFFFB8C00), openBrowser),
+            HomeEntry("المجلدات", "🗂️", Color(0xFF4DB6AC), Color(0xFF00897B), openFolders),
+            HomeEntry("التخزين", "📊", Color(0xFF4FC3F7), Color(0xFF0288D1), openStorage),
+            HomeEntry("التنظيم", "✨", Color(0xFFBA68C8), Color(0xFF8E24AA), openOrganizer),
+        ))
         } }
             items(Category.entries.toList()) { c ->
                 val cover = covers[c]
@@ -215,6 +239,29 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
                 }
             }
     }
+    } }
+    if (showAsk) ModalBottomSheet(onDismissRequest = { showAsk = false }) {
+        Column(Modifier.padding(16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("اسأل ملفاتك", style = MaterialTheme.typography.titleMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(ask, { ask = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("اسأل ملفاتك: مثل «اعرض كل ملفات ZIP من سنة 2025»") })
+            TextButton({
+                try {
+                    voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar"))
+                } catch (e: Exception) { askMsg = "التعرف الصوتي غير متاح على هذا الجهاز" }
+            }) { Text("🎤") }
+            Button({
+                val q = ArabicQueryParser.parse(ask)
+                if (q.isConfident) { askMsg = null; showAsk = false; openQuery(ask, q.toFileFilter(System.currentTimeMillis())) }
+                else askMsg = if (q.unrecognized.isEmpty()) "لم أفهم الطلب. وضّح النوع أو الحجم أو السنة." else "لم أفهم: " + q.unrecognized.joinToString(" ") + " — وضّح المقصود."
+            }) { Text("اسأل") }
+        }
+        askMsg?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        // TODO: voice command button (SpeechRecognizer) wired to the same ArabicQueryParser; never run destructive actions from voice without confirmation.
+        }
+    }
     if (showRationale) AlertDialog(
         onDismissRequest = { showRationale = false },
         title = { Text("إذن قراءة الوسائط") },
@@ -224,19 +271,75 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     )
 }
 
+/** Top bar of the Home screen: menu button (opens the side drawer), title, and three quick actions. */
 @Composable
-private fun HomeButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    OutlinedButton(onClick, modifier, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)) {
-        Text(label, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelLarge)
+private fun HomeTopBar(onMenu: () -> Unit, actions: List<HomeEntry>) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onMenu) { Text("☰", fontSize = 26.sp) }
+        Text("FileMind", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+        actions.forEach { a ->
+            Column(
+                Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = a.onClick).padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) { Text(a.glyph, fontSize = 22.sp); Text(a.label, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+        }
+    }
+}
+
+/** One of the five most-opened files: thumbnail for photos, a document tile for the rest. */
+@Composable
+private fun UsedFileCard(f: UsedFile, onClick: () -> Unit) {
+    Column(Modifier.width(96.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        val isImage = f.name.substringAfterLast('.', "").lowercase() in setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic")
+        if (isImage) WallThumb(f.path, Modifier.size(80.dp).clip(RoundedCornerShape(14.dp)), sizeDp = 80)
+        else Box(Modifier.size(80.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x22808080)), contentAlignment = Alignment.Center) { Text("📄", fontSize = 32.sp) }
+        Text(f.name, style = MaterialTheme.typography.labelSmall, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("فُتح ${f.count}×", style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+/** One launcher-style entry of the Home screen: coloured icon tile + label. */
+private class HomeEntry(val label: String, val glyph: String, val c1: Color, val c2: Color, val onClick: () -> Unit)
+
+@Composable
+private fun HomeIconGrid(items: List<HomeEntry>) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        items.chunked(4).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { e -> HomeIcon(e, Modifier.weight(1f)) }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeIcon(e: HomeEntry, modifier: Modifier = Modifier) {
+    Column(modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = e.onClick).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.size(64.dp).shadow(6.dp, RoundedCornerShape(20.dp)).clip(RoundedCornerShape(20.dp))
+                .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(e.c1, e.c2))),
+            contentAlignment = Alignment.Center,
+        ) { Text(e.glyph, fontSize = 30.sp) }
+        Spacer(Modifier.height(6.dp))
+        Text(e.label, style = MaterialTheme.typography.labelMedium, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
 @Composable
 fun FoldersScreen(vm: AppViewModel, onOpen: (String) -> Unit, onBack: () -> Unit) {
     val files by vm.files.collectAsState()
-    val folders = remember(files) { files.groupBy { it.parent }.entries.sortedByDescending { e -> e.value.sumOf { it.size } } }
+    val sort = rememberScreenSort(vm, "folders", SortOrder.SIZE_DESC, NO_TYPE_ORDERS)
+    val folders = remember(files, sort.order) {
+        val cmp = sort.order.comparator()
+        fun key(e: Map.Entry<String, List<FileEntry>>) = SortKey(e.key, e.value.sumOf { it.size }, e.value.maxOfOrNull { it.modifiedMs ?: 0L }?.takeIf { it > 0 }, "")
+        files.groupBy { it.parent }.entries.sortedWith { a, b -> cmp.compare(key(a), key(b)) }
+    }
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        TextButton(onBack) { Text("رجوع") }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onBack) { Text("رجوع") }
+            Spacer(Modifier.weight(1f)); SortChip(sort)
+        }
         LazyColumn {
             items(folders, key = { it.key }) { (parent, list) ->
                 val pal = FolderPalette.of(list)
@@ -255,9 +358,11 @@ fun OperationsScreen(vm: AppViewModel, onBack: () -> Unit) {
     val msg by vm.message.collectAsState()
     val running by vm.opProgress.collectAsState()
     var q by remember { mutableStateOf("") }
-    val shown = logs.filter { q.isBlank() || it.oldName.contains(q, true) || it.status.contains(q, true) || it.type.contains(q) }
+    val sort = rememberScreenSort(vm, "operations", SortOrder.DATE_DESC)
+    val sortCmp = sort.order.comparator()
+    val shown = logs.filter { q.isBlank() || it.oldName.contains(q, true) || it.status.contains(q, true) || it.type.contains(q) }.sortedWith { a, b -> sortCmp.compare(SortKey(a.oldName, a.size, a.timeMs, a.type), SortKey(b.oldName, b.size, b.timeMs, b.type)) }
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row { TextButton(onBack) { Text("رجوع") }; Spacer(Modifier.weight(1f)); TextButton({ vm.clearLog() }) { Text("مسح السجل") } }
+        Row { TextButton(onBack) { Text("رجوع") }; Spacer(Modifier.weight(1f)); SortChip(sort); TextButton({ vm.clearLog() }) { Text("مسح السجل") } }
         OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("بحث في السجل") })
         running?.let { Row(verticalAlignment = Alignment.CenterVertically) { Text("عملية جارية: $it", Modifier.weight(1f)); TextButton({ vm.stopOp() }) { Text("إيقاف") } } }
         msg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
@@ -331,6 +436,11 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
                 Text("مفعّلة. مواقع صورك تُقرأ وتُخزَّن على جهازك فقط ولا تُرسل إلى أي جهة.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton({ vm.disablePhotoMap() }) { Text("إيقاف الخريطة وحذف بيانات الموقع المخزنة") }
             } else Text("مطفأة. تُفعَّل من «عروض ← خريطة الصور» في قوائم الصور بعد موافقتك الصريحة.", style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            Text("الملفات الأكثر استخداماً", style = MaterialTheme.typography.titleMedium)
+            Text("تظهر في الشاشة الرئيسية خمسة ملفات تفتحها أكثر من داخل التطبيق. العدّاد محلي على جهازك فقط.", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton({ vm.clearUsage() }) { Text("مسح سجل الأكثر استخداماً") }
         }
         item {
             Text("سلة المحذوفات", style = MaterialTheme.typography.titleMedium)

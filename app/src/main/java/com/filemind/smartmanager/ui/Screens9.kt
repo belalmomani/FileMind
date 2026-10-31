@@ -113,7 +113,7 @@ fun PhotoWallScreen(vm: AppViewModel, onBack: () -> Unit) {
                         val ww = w ?: return@detectTapGestures
                         val wx = (pos.x - offset.x) / scale; val wy = (pos.y - offset.y) / scale
                         ww.tiles.lastOrNull { wx >= it.x && wx <= it.x + it.size && wy >= it.y && wy <= it.y + it.size }?.let { t ->
-                            try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(t.path), "image/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            vm.recordOpen(t.path); try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(t.path), "image/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
                             catch (e: Exception) { vm.message.value = "لا يوجد تطبيق لفتح هذه الصورة" }
                         }
                     }

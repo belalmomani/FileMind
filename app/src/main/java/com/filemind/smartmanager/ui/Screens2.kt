@@ -1,5 +1,7 @@
 package com.filemind.smartmanager.ui
 
+import com.filemind.smartmanager.core.SortOrder
+import com.filemind.smartmanager.core.SortKey
 import android.app.Activity
 import android.net.Uri
 import android.os.Build
@@ -28,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.filemind.smartmanager.AppViewModel
+import kotlinx.coroutines.launch
 import com.filemind.smartmanager.core.*
 import com.filemind.smartmanager.data.db.SavedTaskEntity
 
@@ -121,6 +124,12 @@ fun StorageScreen(vm: AppViewModel, openType: (FileType) -> Unit, openFolder: (S
 @Composable
 fun DuplicatesScreen(vm: AppViewModel, onBack: () -> Unit, openSimilar: () -> Unit) {
     val groups by vm.duplicates.collectAsState()
+    val sort = rememberScreenSort(vm, "duplicates", SortOrder.SIZE_DESC)
+    val sortedGroups = remember(groups, sort.order) {
+        val cmp = sort.order.comparator()
+        fun key(g: List<FileEntry>) = SortKey(g.first().name, g.first().size, g.maxOfOrNull { it.modifiedMs ?: 0L }?.takeIf { it > 0 }, g.first().extension ?: "")
+        groups.orEmpty().sortedWith { a, b -> cmp.compare(key(a), key(b)) }
+    }
     val prog by vm.dupProgress.collectAsState()
     val sel = remember { mutableStateListOf<String>() }
     var confirm by remember { mutableStateOf(false) }
@@ -131,6 +140,7 @@ fun DuplicatesScreen(vm: AppViewModel, onBack: () -> Unit, openSimilar: () -> Un
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onBack) { Text("رجوع") }; Spacer(Modifier.weight(1f))
+            SortChip(sort); Spacer(Modifier.width(8.dp))
             OutlinedButton(openSimilar) { Text("صور متشابهة") }
             Spacer(Modifier.width(8.dp))
             Button({ sel.clear(); vm.scanDuplicates() }, enabled = prog == null) { Text(prog ?: "فحص المكررات") }
@@ -141,7 +151,7 @@ fun DuplicatesScreen(vm: AppViewModel, onBack: () -> Unit, openSimilar: () -> Un
         if (groups?.isEmpty() == true) Text("لم يُعثر على نسخ متطابقة.")
         if (removesAllCopies) Text("لا يمكن حذف كل النسخ في مجموعة؛ أبقِ نسخة واحدة على الأقل.", color = MaterialTheme.colorScheme.error)
         LazyColumn(Modifier.weight(1f)) {
-            itemsIndexed(groups.orEmpty()) { i, g ->
+            itemsIndexed(sortedGroups) { i, g ->
                 Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Column(Modifier.padding(8.dp)) {
                         Text("مجموعة ${i + 1}: ${g.size} نسخ متطابقة × ${fmtSize(g.first().size)}", style = MaterialTheme.typography.titleSmall)
@@ -186,8 +196,10 @@ fun OrganizerScreen(vm: AppViewModel, onBack: () -> Unit) {
     var taskName by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<SavedTaskEntity?>(null) }
 
-    val rule = OrganizeRule(types, primary, secondary, ds, destRoot = "", unknownDateFolder = if (unknownFolder) "تاريخ غير معروف" else null)
-    val plan = remember(files, types, primary, secondary, ds, unknownFolder) { Organizer.plan(files, rule) }
+    val monthScope = rememberCoroutineScope()
+    val monthStyle = MonthStyle.fromName(vm.settings.monthStyle.collectAsState(initial = "STANDARD").value)
+    val rule = OrganizeRule(types, primary, secondary, ds, destRoot = "", unknownDateFolder = if (unknownFolder) "تاريخ غير معروف" else null, monthStyle = monthStyle)
+    val plan = remember(files, types, primary, secondary, ds, unknownFolder, monthStyle) { Organizer.plan(files, rule) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             runCatching { ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
@@ -212,6 +224,11 @@ fun OrganizerScreen(vm: AppViewModel, onBack: () -> Unit) {
             }
             Text("مصدر التاريخ", style = MaterialTheme.typography.titleSmall)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(DateSource.entries) { d -> FilterChip(ds == d, { ds = d }, { Text(dsAr(d)) }) } }
+            Text("أسماء الأشهر في المجلدات", style = MaterialTheme.typography.titleSmall)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(MonthStyle.entries) { m -> FilterChip(monthStyle == m, { monthScope.launch { vm.settings.setMonthStyle(m.name) } }, { Text(m.titleAr) }) }
+            }
+            Text("مثال: «صور 2025» ثم بداخله «${monthStyle.names[0]}». ما يُنظَّم حسب السنة أو الشهر يُسمّى بنوعه قبل التاريخ (صور 2025، فيديو 2025).", style = MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically) { Switch(unknownFolder, { unknownFolder = it }); Text("  مجموعة «تاريخ غير معروف» (وإلا تُتجاوز هذه الملفات)") }
             Button({ picker.launch(null) }) { Text(if (dest == null) "اختيار مجلد الوجهة" else "الوجهة: " + (DocumentsContract.getTreeDocumentId(dest!!))) }
             HorizontalDivider()

@@ -1,5 +1,7 @@
 package com.filemind.smartmanager.ui
 
+import com.filemind.smartmanager.core.SortOrder
+import com.filemind.smartmanager.core.SortKey
 import android.content.Intent
 import android.net.Uri
 import android.webkit.MimeTypeMap
@@ -41,6 +43,12 @@ private fun Thumb(path: String, modifier: Modifier) {
 fun SimilarImagesScreen(vm: AppViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val groups by vm.similar.collectAsState()
+    val sort = rememberScreenSort(vm, "similar", SortOrder.SIZE_DESC)
+    val sortedGroups = remember(groups, sort.order) {
+        val cmp = sort.order.comparator()
+        fun key(g: List<FileEntry>) = SortKey(g.first().name, g.first().size, g.maxOfOrNull { it.modifiedMs ?: 0L }?.takeIf { it > 0 }, g.first().extension ?: "")
+        groups.orEmpty().sortedWith { a, b -> cmp.compare(key(a), key(b)) }
+    }
     val prog by vm.similarProgress.collectAsState()
     val skipped by vm.similarSkipped.collectAsState()
     val sel = remember { mutableStateListOf<String>() }
@@ -51,13 +59,14 @@ fun SimilarImagesScreen(vm: AppViewModel, onBack: () -> Unit) {
 
     fun open(e: FileEntry) {
         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(e.extension ?: "") ?: "image/*"
-        try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(e.path), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        vm.recordOpen(e.path); try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(e.path), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
         catch (ex: Exception) { vm.message.value = "لا يوجد تطبيق لعرض الصورة" }
     }
 
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onBack) { Text("رجوع") }; Spacer(Modifier.weight(1f))
+            SortChip(sort); Spacer(Modifier.width(8.dp))
             Button({ sel.clear(); vm.scanSimilar() }, enabled = prog == null) { Text(prog ?: "فحص الصور المتشابهة") }
         }
         Text("الصور هنا متشابهة بصرياً وليست بالضرورة متطابقة (بصمة إدراكية dHash). راجع كل مجموعة بنفسك؛ لا حذف تلقائياً.", style = MaterialTheme.typography.bodySmall)
@@ -66,7 +75,7 @@ fun SimilarImagesScreen(vm: AppViewModel, onBack: () -> Unit) {
         else if (groups != null && skipped > 0) Text("تعذر تحليل $skipped صورة (صيغة غير مدعومة).", style = MaterialTheme.typography.bodySmall)
         if (removesAll) Text("أبقِ صورة واحدة على الأقل في كل مجموعة.", color = MaterialTheme.colorScheme.error)
         LazyColumn(Modifier.weight(1f)) {
-            itemsIndexed(groups.orEmpty()) { i, g ->
+            itemsIndexed(sortedGroups) { i, g ->
                 Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Column(Modifier.padding(8.dp)) {
                         Text("مجموعة ${i + 1}: ${g.size} صور", style = MaterialTheme.typography.titleSmall)

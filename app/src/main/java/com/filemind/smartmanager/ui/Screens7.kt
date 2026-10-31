@@ -97,7 +97,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
     fun toggle(i: BItem) { if (i.docId in selected) selected.remove(i.docId) else selected.add(i.docId) }
     fun open(i: BItem) {
         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(i.ext ?: "") ?: i.mime ?: "*/*"
-        try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(i.uri), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        vm.recordOpen(i.uri); try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(i.uri), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
         catch (e: Exception) { vm.message.value = "لا يوجد تطبيق متوافق لفتح هذا الملف" }
     }
     fun click(i: BItem) {

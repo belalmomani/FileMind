@@ -1,5 +1,6 @@
 package com.filemind.smartmanager
 
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.NonCancellable
@@ -23,6 +24,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
+
+/** A file shown under "most used" on the Home screen (resolved from its stored open counter). */
+class UsedFile(val path: String, val name: String, val size: Long, val count: Int)
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val settings = SettingsRepository(app)
@@ -349,6 +353,54 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         withContext(Dispatchers.IO) { GeoCache.clear(getApplication<Application>()) }
         geoIndex.value = emptyMap()
         message.value = "أُوقفت خريطة الصور وحُذفت بيانات الموقع المخزنة"
+    }
+
+    // ---- Most used files: a local counter of files opened from inside the app ----
+    val mostUsed = MutableStateFlow<List<UsedFile>>(emptyList())
+    private var usage: List<UsageEntry>? = null
+    private val usageLock = kotlinx.coroutines.sync.Mutex()
+
+    private fun resolveMostUsed(app: Application, list: List<UsageEntry>) {
+        val cr = app.contentResolver
+        val out = ArrayList<UsedFile>(); var kept = list
+        for (e in UsageStats.top(list, 12)) {
+            val meta = runCatching {
+                cr.query(Uri.parse(e.path), arrayOf(android.provider.OpenableColumns.DISPLAY_NAME, android.provider.OpenableColumns.SIZE), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) (c.getString(0) ?: "") to (if (c.isNull(1)) 0L else c.getLong(1)) else null
+                }
+            }.getOrNull()
+            if (meta == null || meta.first.isBlank()) { kept = UsageStats.remove(kept, e.path); continue }   // deleted or moved: forget it
+            out += UsedFile(e.path, meta.first, meta.second, e.count)
+            if (out.size == 5) break
+        }
+        if (kept.size != list.size) { usage = kept; UsageStore.save(app, kept) }
+        mostUsed.value = out
+    }
+
+    fun recordOpen(path: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            usageLock.withLock {
+                val app = getApplication<Application>()
+                val next = UsageStats.record(usage ?: UsageStore.load(app), path, System.currentTimeMillis())
+                usage = next; UsageStore.save(app, next)
+                resolveMostUsed(app, next)
+            }
+        }
+    }
+
+    fun refreshMostUsed() {
+        viewModelScope.launch(Dispatchers.IO) {
+            usageLock.withLock {
+                val app = getApplication<Application>()
+                val cur = usage ?: UsageStore.load(app).also { usage = it }
+                resolveMostUsed(app, cur)
+            }
+        }
+    }
+
+    fun clearUsage() = viewModelScope.launch(Dispatchers.IO) {
+        usageLock.withLock { usage = emptyList(); UsageStore.clear(getApplication<Application>()); mostUsed.value = emptyList() }
+        message.value = "مُسح سجل الملفات الأكثر استخداماً"
     }
 
     /** Set by the file list just before opening the photo wall (plain field: read once when the wall opens). */
