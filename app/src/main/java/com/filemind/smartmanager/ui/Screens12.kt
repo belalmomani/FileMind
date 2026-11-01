@@ -129,8 +129,7 @@ private fun MapBody(vm: AppViewModel, req: WallRequest?, onBack: () -> Unit) {
 
     fun diameterDp(count: Int) = min(28f + 10f * sqrt(count.toFloat()), 76f)
     fun open(p: WallPhoto) {
-        vm.recordOpen(p.path); try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(p.path), "image/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        catch (e: Exception) { vm.message.value = "لا يوجد تطبيق لفتح هذه الصورة" }
+        vm.requestOpen(p.path)
     }
 
     Column(Modifier.fillMaxSize()) {

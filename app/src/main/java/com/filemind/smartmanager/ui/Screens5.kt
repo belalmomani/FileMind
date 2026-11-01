@@ -59,8 +59,7 @@ fun SimilarImagesScreen(vm: AppViewModel, onBack: () -> Unit) {
 
     fun open(e: FileEntry) {
         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(e.extension ?: "") ?: "image/*"
-        vm.recordOpen(e.path); try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(e.path), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        catch (ex: Exception) { vm.message.value = "لا يوجد تطبيق لعرض الصورة" }
+        vm.requestOpen(e.path)
     }
 
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

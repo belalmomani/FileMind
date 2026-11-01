@@ -25,6 +25,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 
+/** A file the user asked to open, waiting for (or past) the "open with" choice. */
+class OpenRequest(val path: String, val name: String, val isImage: Boolean)
+
 /** A file shown under "most used" on the Home screen (resolved from its stored open counter). */
 class UsedFile(val path: String, val name: String, val size: Long, val count: Int)
 
@@ -353,6 +356,69 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         withContext(Dispatchers.IO) { GeoCache.clear(getApplication<Application>()) }
         geoIndex.value = emptyMap()
         message.value = "أُوقفت خريطة الصور وحُذفت بيانات الموقع المخزنة"
+    }
+
+    // ---- Opening files: one place decides between the built-in viewer, the system "open with" chooser, the default app and the system explorer ----
+    val openRequest = MutableStateFlow<OpenRequest?>(null)
+    val viewerImage = MutableStateFlow<OpenRequest?>(null)
+
+    private fun displayNameOf(path: String): String? = runCatching {
+        getApplication<Application>().contentResolver.query(Uri.parse(path), arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    }.getOrNull()
+
+    /** Every "open a file" in the app goes through here: counts the open, then either asks "open with…" or follows the remembered choice. */
+    fun requestOpen(path: String) {
+        recordOpen(path)
+        viewModelScope.launch {
+            val name = withContext(Dispatchers.IO) { displayNameOf(path) } ?: Uri.decode(path.substringAfterLast('/')).substringAfterLast(':')
+            val req = OpenRequest(path, name, OpenPolicy.isImageName(name))
+            val action = OpenPolicy.decide(OpenMode.fromName(settings.openMode.first()), req.isImage)
+            if (action == null) openRequest.value = req else perform(action, req, false)
+        }
+    }
+
+    fun perform(action: OpenAction, req: OpenRequest, rememberChoice: Boolean) {
+        openRequest.value = null
+        if (rememberChoice) OpenPolicy.modeToRemember(action)?.let { m -> viewModelScope.launch { settings.setOpenMode(m.name) } }
+        when (action) {
+            OpenAction.INTERNAL -> viewerImage.value = req
+            OpenAction.DEFAULT -> startView(req.path, chooser = false)
+            OpenAction.CHOOSER -> startView(req.path, chooser = true)
+            OpenAction.EXPLORER -> revealInExplorer(req.path)
+        }
+    }
+
+    private fun startView(path: String, chooser: Boolean) {
+        val app = getApplication<Application>(); val uri = Uri.parse(path)
+        val mime = app.contentResolver.getType(uri)
+            ?: android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(path.substringAfterLast('.', "").lowercase()) ?: "*/*"
+        val view = android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val intent = if (chooser) android.content.Intent.createChooser(view, "فتح بواسطة") else view
+        try { app.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (e: Exception) { message.value = "لا يوجد تطبيق لفتح هذا الملف" }
+    }
+
+    /** Best effort: asks the system file explorer to show the folder that holds the file. Not every device's explorer supports it. */
+    private fun revealInExplorer(path: String) {
+        val app = getApplication<Application>(); val uri = Uri.parse(path)
+        val parent: Uri? = try {
+            if (uri.authority == "media") {
+                var rel: String? = null
+                if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    app.contentResolver.query(uri, arrayOf(android.provider.MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)?.use { c -> if (c.moveToFirst()) rel = c.getString(0) }
+                }
+                rel?.let { android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:" + it.trim('/')) }
+            } else {
+                val id = android.provider.DocumentsContract.getDocumentId(uri)
+                android.provider.DocumentsContract.buildDocumentUri(uri.authority!!, TrashStore.parentDocId(id))
+            }
+        } catch (e: Exception) { null }
+        if (parent == null) { message.value = "تعذر تحديد مجلد الملف"; return }
+        try {
+            app.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(parent, android.provider.DocumentsContract.Document.MIME_TYPE_DIR).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) { message.value = "مستكشف النظام في هذا الجهاز لا يدعم فتح المجلد مباشرة" }
     }
 
     // ---- Most used files: a local counter of files opened from inside the app ----

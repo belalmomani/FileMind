@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -67,13 +68,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     val drawerScope = rememberCoroutineScope()
     androidx.activity.compose.BackHandler(enabled = drawer.isOpen) { drawerScope.launch { drawer.close() } }
     LaunchedEffect(Unit) { vm.refreshMostUsed() }
-    fun openUsed(f: UsedFile) {
-        vm.recordOpen(f.path)
-        val uri = android.net.Uri.parse(f.path)
-        val mime = ctx.contentResolver.getType(uri) ?: android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.name.substringAfterLast('.', "").lowercase()) ?: "*/*"
-        try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        catch (e: Exception) { vm.message.value = "لا يوجد تطبيق لفتح هذا الملف" }
-    }
+    fun openUsed(f: UsedFile) = vm.requestOpen(f.path)
     val gridCols by vm.settings.gridColumns.collectAsState(initial = 0)
     // Removable volumes (USB OTG / SD card) detected through StorageManager; access still needs the user's folder grant (SAF).
     val storageManager = remember { ctx.getSystemService(android.content.Context.STORAGE_SERVICE) as android.os.storage.StorageManager }
@@ -436,6 +431,14 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
                 Text("مفعّلة. مواقع صورك تُقرأ وتُخزَّن على جهازك فقط ولا تُرسل إلى أي جهة.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton({ vm.disablePhotoMap() }) { Text("إيقاف الخريطة وحذف بيانات الموقع المخزنة") }
             } else Text("مطفأة. تُفعَّل من «عروض ← خريطة الصور» في قوائم الصور بعد موافقتك الصريحة.", style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            val openModeName by vm.settings.openMode.collectAsState(initial = "ASK")
+            Text("طريقة فتح الملفات", style = MaterialTheme.typography.titleMedium)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(OpenMode.entries) { m -> FilterChip(OpenMode.fromName(openModeName) == m, { scope.launch { vm.settings.setOpenMode(m.name) } }, { Text(m.titleAr) }) }
+            }
+            Text("«اسألني» يعرض خيارات: داخل FileMind (للصور) أو فتح بواسطة تطبيق من النظام أو الافتراضي أو إظهار الملف في مستكشف النظام.", style = MaterialTheme.typography.bodySmall)
         }
         item {
             Text("الملفات الأكثر استخداماً", style = MaterialTheme.typography.titleMedium)

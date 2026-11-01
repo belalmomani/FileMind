@@ -112,8 +112,7 @@ fun FileListScreen(vm: AppViewModel, title: String, key: String, base: (FileEntr
 
     fun open(e: FileEntry) {
         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(e.extension ?: "") ?: "*/*"
-        vm.recordOpen(e.path); try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(e.path), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        catch (ex: Exception) { vm.message.value = "لا يوجد تطبيق متوافق لفتح هذا الملف" }
+        vm.requestOpen(e.path)
     }
     fun share(list: List<FileEntry>) {
         val uris = ArrayList(list.map { Uri.parse(it.path) })

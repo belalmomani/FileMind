@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     conflict?.let { c -> ConflictDialog(c) { d, all -> vm.answerConflict(d, all) } }
+                    OpenHost(vm)
                     crashText?.let { txt ->
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = {},
