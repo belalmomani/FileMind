@@ -324,23 +324,60 @@ private fun HomeIcon(e: HomeEntry, modifier: Modifier = Modifier) {
 @Composable
 fun FoldersScreen(vm: AppViewModel, onOpen: (String) -> Unit, onBack: () -> Unit) {
     val files by vm.files.collectAsState()
-    val sort = rememberScreenSort(vm, "folders", SortOrder.SIZE_DESC, NO_TYPE_ORDERS)
-    val folders = remember(files, sort.order) {
-        val cmp = sort.order.comparator()
-        fun key(e: Map.Entry<String, List<FileEntry>>) = SortKey(e.key, e.value.sumOf { it.size }, e.value.maxOfOrNull { it.modifiedMs ?: 0L }?.takeIf { it > 0 }, "")
-        files.groupBy { it.parent }.entries.sortedWith { a, b -> cmp.compare(key(a), key(b)) }
+    val showThumbs by vm.settings.showThumbs.collectAsState(initial = true)
+    val sort = rememberScreenSort(vm, "folders", SortOrder.NAME_ASC, NO_TYPE_ORDERS)
+    var path by remember { mutableStateOf("") }
+    val root = remember(files) { FolderTree.build(files) }
+    val node = FolderTree.find(root, path) ?: root
+    // Back goes up one folder first, and leaves the screen only from the top.
+    androidx.activity.compose.BackHandler(enabled = path.isNotEmpty()) { path = path.substringBeforeLast('/', "") }
+    val cmp = sort.order.comparator()
+    val subfolders = remember(node, sort.order) {
+        node.children.values.sortedWith { a, b -> cmp.compare(SortKey(a.name, a.totalSize, a.newestMs, ""), SortKey(b.name, b.totalSize, b.newestMs, "")) }
     }
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    val direct = remember(node, sort.order) { node.files.sortedByOrder(sort.order) }
+    Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onBack) { Text("رجوع") }
+            TextButton({ if (path.isEmpty()) onBack() else path = path.substringBeforeLast('/', "") }) { Text(if (path.isEmpty()) "رجوع" else "↑ المجلد الأعلى") }
             Spacer(Modifier.weight(1f)); SortChip(sort)
         }
+        // Breadcrumb like the system explorer: all files > internal storage > Download > ...
+        Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+            TextButton({ path = "" }) { Text("وحدة التخزين الداخلية") }
+            var acc = ""
+            path.split('/').filter { it.isNotEmpty() }.forEach { seg ->
+                acc = if (acc.isEmpty()) seg else "$acc/$seg"
+                val target = acc
+                Text("›"); TextButton({ path = target }) { Text(seg) }
+            }
+        }
+        FolderSizeLegend()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${node.totalFiles} ملف · ${fmtSize(node.totalSize)}", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+            if (path.isNotEmpty()) TextButton({ onOpen(path) }) { Text("عرض ملفاته كقائمة") }
+        }
+        if (subfolders.isEmpty() && direct.isEmpty()) Text("لا توجد ملفات.", Modifier.padding(16.dp))
         LazyColumn {
-            items(folders, key = { it.key }) { (parent, list) ->
-                val pal = FolderPalette.of(list)
-                Row(Modifier.fillMaxWidth().clickable { onOpen(parent) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FolderIcon(pal.colors, pal.hasMore)
-                    Column { Text(parent.ifBlank { "(بدون مسار)" }, maxLines = 1); Text("${list.size} ملف · ${fmtSize(list.sumOf { it.size })}", style = MaterialTheme.typography.bodySmall) }
+            items(subfolders, key = { "d:" + it.path }) { d ->
+                Row(Modifier.fillMaxWidth().clickable { path = d.path }.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SizeFolderIcon(d.size)
+                    Column(Modifier.weight(1f)) {
+                        Text(d.name, maxLines = 1)
+                        Text("${d.totalFiles} ملف · ${fmtSize(d.totalSize)}" + (if (d.children.isNotEmpty()) " · ${d.children.size} مجلد" else ""), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("›")
+                }
+            }
+            items(direct, key = { "f:" + it.path }) { e ->
+                Row(Modifier.fillMaxWidth().clickable { vm.requestOpen(e.path) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (showThumbs && e.type == FileType.IMAGE) WallThumb(e.path, Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)), sizeDp = 44)
+                    else Box(Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(Color(if (e.isHidden) FileType.HIDDEN_ARGB else e.type.argb)), contentAlignment = Alignment.Center) {
+                        Text((e.extension ?: "").take(4).uppercase(), color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(e.name, maxLines = 1)
+                        Text(fmtSize(e.size) + (e.modifiedMs?.let { " · " + fmtDate(it) } ?: ""), style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }

@@ -75,7 +75,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
     var textInput by remember { mutableStateOf("") }
     var pendingMove by remember { mutableStateOf(true) }
     val cur = stack.lastOrNull()
-    val byParent = remember(files) { files.groupBy { it.parent } }
+    val folderTree = remember(files) { FolderTree.build(files) }
 
     LaunchedEffect(cur, reload) {
         result = null
@@ -219,7 +219,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
                     gridItems(shownItems, key = { it.docId }) { i ->
                         Column(Modifier.clip(RoundedCornerShape(10.dp)).background(if (i.docId in selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent)
                             .combinedClickable(onClick = { click(i) }, onLongClick = { toggle(i) }).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            ItemIcon(i, byParent, (iconDp * 1.4f).toInt())
+                            ItemIcon(i, folderTree, (iconDp * 1.4f).toInt(), cr, cur?.tree)
                             Text(i.name, maxLines = 2, style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -229,7 +229,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
                         Row(Modifier.fillMaxWidth().background(if (i.docId in selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
                             .combinedClickable(onClick = { click(i) }, onLongClick = { toggle(i) }).padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            ItemIcon(i, byParent, iconDp)
+                            ItemIcon(i, folderTree, iconDp, cr, cur?.tree)
                             Column(Modifier.weight(1f)) {
                                 Text((if (favs.contains(favKey(cur.tree, i.docId, i.name, i.isDir))) "★ " else "") + i.name, maxLines = 1)
                                 if (viewMode == ViewMode.DETAILS) Text(listOf(if (i.isDir) "مجلد" else (i.ext ?: "بلا امتداد"), if (i.isDir) "" else fmtSize(i.size), fmtDate(i.modified)).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
@@ -297,10 +297,15 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ItemIcon(i: BItem, byParent: Map<String, List<FileEntry>>, sizeDp: Int) {
+private fun ItemIcon(i: BItem, tree: FolderNode, sizeDp: Int, cr: android.content.ContentResolver, treeUri: String?) {
     if (i.isDir) {
-        val pal = FolderPalette.of(byParent[i.docId].orEmpty())
-        FolderIcon(pal.colors, pal.hasMore, Modifier.size((sizeDp * 1.2f).dp, sizeDp.dp))
+        val node = FolderTree.find(tree, FolderTree.normalize(i.docId))
+        // A folder the index knows gets its size colour. An unknown one is asked directly whether it is empty (one cheap listing, visible rows only).
+        val empty by produceState<Boolean?>(null, i.docId, node == null) {
+            if (node == null && treeUri != null) value = withContext(Dispatchers.IO) { runCatching { FolderLister.list(cr, Uri.parse(treeUri), i.docId).items.isEmpty() }.getOrNull() }
+        }
+        val cls = when { node != null -> node.size; empty == true -> FolderSize.EMPTY; else -> null }
+        SizeFolderIcon(cls, Modifier.size((sizeDp * 1.2f).dp, sizeDp.dp))
     } else {
         val c = Color(FileType.fromExtension(i.ext).let { if (i.isHidden) FileType.HIDDEN_ARGB else it.argb })
         Box(Modifier.size(sizeDp.dp).clip(RoundedCornerShape(8.dp)).background(c), contentAlignment = Alignment.Center) {
