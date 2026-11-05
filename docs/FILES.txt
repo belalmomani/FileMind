@@ -38,6 +38,7 @@ app/src/main/java/com/filemind/smartmanager/core/ZipMaker.kt
 app/src/main/java/com/filemind/smartmanager/data/ArchiveReaders.kt
 app/src/main/java/com/filemind/smartmanager/data/ColorCache.kt
 app/src/main/java/com/filemind/smartmanager/data/FolderLister.kt
+app/src/main/java/com/filemind/smartmanager/data/FsScanner.kt
 app/src/main/java/com/filemind/smartmanager/data/GeoCache.kt
 app/src/main/java/com/filemind/smartmanager/data/ImageHasher.kt
 app/src/main/java/com/filemind/smartmanager/data/PendingRunner.kt
@@ -82,6 +83,7 @@ app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
 app/src/main/res/values-ar/strings.xml
 app/src/main/res/values/strings.xml
+app/src/main/res/xml/file_paths.xml
 app/src/test/java/com/filemind/smartmanager/core/ArchiveAndTaskTest.kt
 app/src/test/java/com/filemind/smartmanager/core/ColorAnalysisTest.kt
 app/src/test/java/com/filemind/smartmanager/core/CompareTreemapTest.kt
@@ -103,6 +105,7 @@ app/src/test/java/com/filemind/smartmanager/core/TrashIndexTest.kt
 app/src/test/java/com/filemind/smartmanager/core/UsageStatsTest.kt
 app/src/test/java/com/filemind/smartmanager/core/WallLayoutTest.kt
 app/src/test/java/com/filemind/smartmanager/core/ZipMakerTest.kt
+app/src/test/java/com/filemind/smartmanager/data/FsScannerTest.kt
 build.gradle.kts
 docs/KNOWN_LIMITATIONS.md
 docs/PERMISSIONS.md

@@ -28,8 +28,8 @@ import kotlinx.coroutines.flow.first
 /** A file the user asked to open, waiting for (or past) the "open with" choice. */
 class OpenRequest(val path: String, val name: String, val isImage: Boolean)
 
-/** A file shown under "most used" on the Home screen (resolved from its stored open counter). */
-class UsedFile(val path: String, val name: String, val size: Long, val count: Int)
+/** A folder shown under "most used" on the Home screen: its normalized path and how many times it was entered. */
+class UsedFolder(val path: String, val count: Int)
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val settings = SettingsRepository(app)
@@ -58,6 +58,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveThumbDp() = viewModelScope.launch { settings.setPhotoThumbDp(thumbDp.value) }
 
     init {
+        allFilesAccess.value = hasAllFiles()
         viewModelScope.launch { thumbDp.value = settings.photoThumbDp.first(); photoGrid.value = settings.photoGrid.first() }
         // Auto-purge of expired trash (only trashed items with a known deletion time; never anything else).
         viewModelScope.launch(Dispatchers.IO) {
@@ -77,14 +78,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun rescan() = viewModelScope.launch {
         scanning.value = true
-        val (all, failed) = withContext(Dispatchers.IO) {
+        val (all, failed, empties) = withContext(Dispatchers.IO) {
             val cr = getApplication<Application>().contentResolver
             val acc = ArrayList<FileEntry>(); val fail = ArrayList<String>()
             MediaScanner(cr).scan().let { acc += it.files; fail += it.failedFolders }
             roots.value.forEach { r -> SafScanner(cr).scan(Uri.parse(r)).let { acc += it.files; fail += it.failedFolders } }
-            dedupeAcrossSources(acc) to fail
+            // With "all files access": also walk the real storage for what MediaStore hides (documents, APK, archives, hidden files, empty folders).
+            var empty: List<String> = emptyList()
+            if (hasAllFiles()) runCatching { FsScanner.scan() }.getOrNull()?.let { acc += it.files; empty = it.emptyDirs }
+            Triple(dedupeAcrossSources(acc), fail, empty)
         }
-        files.value = all; failedFolders.value = failed; scanning.value = false
+        files.value = all; failedFolders.value = failed; emptyDirs.value = empties.toSet(); scanning.value = false
         if (failed.isEmpty()) withContext(Dispatchers.IO) {
             runCatching {
                 db.index().replaceAll(all.map { IndexedFile(it.path, it.name, it.size, it.modifiedMs, it.exifDateMs, it.parent) })
@@ -370,7 +374,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Every "open a file" in the app goes through here: counts the open, then either asks "open with…" or follows the remembered choice. */
     fun requestOpen(path: String) {
-        recordOpen(path)
         viewModelScope.launch {
             val name = withContext(Dispatchers.IO) { displayNameOf(path) } ?: Uri.decode(path.substringAfterLast('/')).substringAfterLast(':')
             val req = OpenRequest(path, name, OpenPolicy.isImageName(name))
@@ -390,8 +393,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Other apps cannot read file: URIs; those go through our FileProvider. */
+    private fun viewUri(path: String): Uri {
+        val u = Uri.parse(path)
+        if (u.scheme != "file") return u
+        val app = getApplication<Application>()
+        return androidx.core.content.FileProvider.getUriForFile(app, app.packageName + ".fileprovider", java.io.File(u.path!!))
+    }
+
     private fun startView(path: String, chooser: Boolean) {
-        val app = getApplication<Application>(); val uri = Uri.parse(path)
+        val app = getApplication<Application>(); val uri = try { viewUri(path) } catch (e: Exception) { message.value = "تعذر فتح هذا الملف"; return }
         val mime = app.contentResolver.getType(uri)
             ?: android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(path.substringAfterLast('.', "").lowercase()) ?: "*/*"
         val view = android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -404,7 +415,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun revealInExplorer(path: String) {
         val app = getApplication<Application>(); val uri = Uri.parse(path)
         val parent: Uri? = try {
-            if (uri.authority == "media") {
+            if (uri.scheme == "file") {
+                val rel = java.io.File(uri.path!!).parent.orEmpty().removePrefix(android.os.Environment.getExternalStorageDirectory().absolutePath).trim('/')
+                android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:$rel")
+            } else if (uri.authority == "media") {
                 var rel: String? = null
                 if (android.os.Build.VERSION.SDK_INT >= 29) {
                     app.contentResolver.query(uri, arrayOf(android.provider.MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)?.use { c -> if (c.moveToFirst()) rel = c.getString(0) }
@@ -421,35 +435,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) { message.value = "مستكشف النظام في هذا الجهاز لا يدعم فتح المجلد مباشرة" }
     }
 
-    // ---- Most used files: a local counter of files opened from inside the app ----
-    val mostUsed = MutableStateFlow<List<UsedFile>>(emptyList())
+    // ---- Most used FOLDERS: a local counter of folders entered from the Folders screen and the Browser ----
+    val mostUsed = MutableStateFlow<List<UsedFolder>>(emptyList())
     private var usage: List<UsageEntry>? = null
     private val usageLock = kotlinx.coroutines.sync.Mutex()
+    /** Set by the Home screen before opening Folders so it starts inside the chosen folder. */
+    var foldersStartPath: String = ""
 
-    private fun resolveMostUsed(app: Application, list: List<UsageEntry>) {
-        val cr = app.contentResolver
-        val out = ArrayList<UsedFile>(); var kept = list
-        for (e in UsageStats.top(list, 12)) {
-            val meta = runCatching {
-                cr.query(Uri.parse(e.path), arrayOf(android.provider.OpenableColumns.DISPLAY_NAME, android.provider.OpenableColumns.SIZE), null, null, null)?.use { c ->
-                    if (c.moveToFirst()) (c.getString(0) ?: "") to (if (c.isNull(1)) 0L else c.getLong(1)) else null
-                }
-            }.getOrNull()
-            if (meta == null || meta.first.isBlank()) { kept = UsageStats.remove(kept, e.path); continue }   // deleted or moved: forget it
-            out += UsedFile(e.path, meta.first, meta.second, e.count)
-            if (out.size == 5) break
-        }
-        if (kept.size != list.size) { usage = kept; UsageStore.save(app, kept) }
-        mostUsed.value = out
+    private fun publishMostUsed(dirs: List<UsageEntry>) {
+        mostUsed.value = UsageStats.top(dirs, 5).map { UsedFolder(it.path.removePrefix(UsageStats.DIR), it.count) }
     }
 
-    fun recordOpen(path: String) {
+    /** Counts one visit to [path] (normalized folder path such as "Download/Film"). Old per-file counters from earlier versions are dropped here. */
+    fun recordFolder(path: String) {
+        if (path.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
             usageLock.withLock {
                 val app = getApplication<Application>()
-                val next = UsageStats.record(usage ?: UsageStore.load(app), path, System.currentTimeMillis())
+                val dirs = (usage ?: UsageStore.load(app)).filter { it.path.startsWith(UsageStats.DIR) }
+                val next = UsageStats.record(dirs, UsageStats.DIR + path, System.currentTimeMillis())
                 usage = next; UsageStore.save(app, next)
-                resolveMostUsed(app, next)
+                publishMostUsed(next)
             }
         }
     }
@@ -458,15 +464,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             usageLock.withLock {
                 val app = getApplication<Application>()
-                val cur = usage ?: UsageStore.load(app).also { usage = it }
-                resolveMostUsed(app, cur)
+                val all = usage ?: UsageStore.load(app)
+                val dirs = all.filter { it.path.startsWith(UsageStats.DIR) }
+                if (dirs.size != all.size) UsageStore.save(app, dirs)   // forget the old per-file counters
+                usage = dirs
+                publishMostUsed(dirs)
             }
         }
     }
 
     fun clearUsage() = viewModelScope.launch(Dispatchers.IO) {
         usageLock.withLock { usage = emptyList(); UsageStore.clear(getApplication<Application>()); mostUsed.value = emptyList() }
-        message.value = "مُسح سجل الملفات الأكثر استخداماً"
+        message.value = "مُسح سجل الأكثر استخداماً"
+    }
+
+    // ---- "All files access" (optional, Android 11+): lets the system show documents / APK / archives that it hides from normal apps ----
+    val allFilesAccess = MutableStateFlow(false)
+    /** Folders that hold no file anywhere (only known after a real directory walk, i.e. with all files access). */
+    val emptyDirs = MutableStateFlow<Set<String>>(emptySet())
+    private fun hasAllFiles(): Boolean = android.os.Build.VERSION.SDK_INT >= 30 && android.os.Environment.isExternalStorageManager()
+    fun refreshAllFilesAccess() {
+        val now = hasAllFiles(); val was = allFilesAccess.value
+        allFilesAccess.value = now
+        if (now && !was) rescan()   // permission just granted: the index must be read again to see the new files
     }
 
     /** Set by the file list just before opening the photo wall (plain field: read once when the wall opens). */
@@ -539,11 +559,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Deletes files found by the real-storage walk (file: URIs). Needs "all files access"; failures are reported, never silent. */
+    fun deleteLocal(entries: List<FileEntry>) {
+        val ok = entries.filter { runCatching { java.io.File(Uri.parse(it.path).path!!).delete() }.getOrDefault(false) }
+        if (ok.isNotEmpty()) logDelete(ok, true)
+        val bad = entries - ok.toSet()
+        if (bad.isNotEmpty()) {
+            logDelete(bad, false, "تعذر الحذف (تحقق من إذن الوصول لكل الملفات)")
+            message.value = "تعذر حذف ${bad.size} ملف؛ تحقق من إذن «الوصول لكل الملفات»"
+        }
+    }
+
     /** Deletes non-media MediaStore entries (subtitles, documents, unknown) through a granted folder. Logs both outcomes and reports what could not be deleted. */
     fun deleteViaGrantedFolders(entries: List<FileEntry>) {
         val cr = getApplication<Application>().contentResolver
-        val done = entries.filter { SafOps.deleteViaRoots(cr, roots.value, it) }
-        val left = entries - done.toSet()
+        // With "all files access" the system lets us delete any file directly.
+        var remaining = entries
+        if (hasAllFiles()) {
+            val direct = entries.filter { e -> runCatching { if (e.path.startsWith("file:")) java.io.File(Uri.parse(e.path).path!!).delete() else cr.delete(Uri.parse(e.path), null, null) > 0 }.getOrDefault(false) }
+            if (direct.isNotEmpty()) logDelete(direct, true)
+            remaining = entries - direct.toSet()
+        }
+        val done = remaining.filter { SafOps.deleteViaRoots(cr, roots.value, it) }
+        val left = remaining - done.toSet()
         if (done.isNotEmpty()) logDelete(done, true)
         if (left.isNotEmpty()) {
             logDelete(left, false, "لا يوجد مجلد ممنوح يغطي مسار الملف")
@@ -553,12 +591,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearLog() = viewModelScope.launch { db.logs().clear() }
 
-    /** The same physical file can appear via MediaStore AND a granted folder; keep the folder entry only. */
+    /**
+     * The same physical file can appear via MediaStore, a granted folder AND the real-storage walk. Priority: granted folder, then MediaStore (content: URIs
+     * work with every flow), then the walk (file: URIs) which is kept only for files nobody else reported.
+     */
     private fun dedupeAcrossSources(all: List<FileEntry>): List<FileEntry> {
         fun isMedia(e: FileEntry) = Uri.parse(e.path).authority == "media"
+        fun isFs(e: FileEntry) = e.path.startsWith("file:")
         fun key(e: FileEntry) = Triple(e.name, e.size, (e.modifiedMs ?: -1L) / 1000)
-        val saf = all.filter { !isMedia(it) }.map(::key).toSet()
-        return all.filter { !isMedia(it) || key(it) !in saf }
+        fun place(e: FileEntry) = FolderTree.normalize(e.parent) to e.name
+        val saf = all.filter { !isMedia(it) && !isFs(it) }.map(::key).toSet()
+        val mediaKeys = all.filter { isMedia(it) }.map(::key).toSet()
+        val mediaPlaces = all.filter { isMedia(it) }.map(::place).toSet()
+        return all.filter { e ->
+            when {
+                isMedia(e) -> key(e) !in saf
+                isFs(e) -> key(e) !in saf && key(e) !in mediaKeys && place(e) !in mediaPlaces
+                else -> true
+            }
+        }
     }
 
     private suspend fun logResults(type: String, results: List<OpResult>) {

@@ -1,6 +1,5 @@
 package com.filemind.smartmanager.ui
 
-import com.filemind.smartmanager.UsedFile
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import com.filemind.smartmanager.core.SortOrder
@@ -68,7 +67,7 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
     val drawerScope = rememberCoroutineScope()
     androidx.activity.compose.BackHandler(enabled = drawer.isOpen) { drawerScope.launch { drawer.close() } }
     LaunchedEffect(Unit) { vm.refreshMostUsed() }
-    fun openUsed(f: UsedFile) = vm.requestOpen(f.path)
+    val allFiles by vm.allFilesAccess.collectAsState()
     val gridCols by vm.settings.gridColumns.collectAsState(initial = 0)
     // Removable volumes (USB OTG / SD card) detected through StorageManager; access still needs the user's folder grant (SAF).
     val storageManager = remember { ctx.getSystemService(android.content.Context.STORAGE_SERVICE) as android.os.storage.StorageManager }
@@ -207,10 +206,17 @@ fun HomeScreen(vm: AppViewModel, openCategory: (Category) -> Unit, openQuery: (S
         Text("${files.size} ملف · ${fmtSize(totalSize)} · ${roots.size} مجلد مضاف" + if (failed.isNotEmpty()) " · تعذر فحص ${failed.size} مجلد" else "", style = MaterialTheme.typography.bodySmall)
         indexTime?.let { Text("الفهرس المحلي (نسخة مخبأة قد تكون قديمة) محدّث: ${fmtDate(it)}" + if (scanning) " — جارٍ التحديث…" else "", style = MaterialTheme.typography.bodySmall) }
         if (failed.isNotEmpty()) Text("المجلدات التي تعذر فحصها غير محسوبة (لا تُعتبر فارغة).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        if (mostUsed.isNotEmpty()) {
-            Text("الأكثر استخداماً", style = MaterialTheme.typography.titleMedium)
+        if (android.os.Build.VERSION.SDK_INT >= 30 && !allFiles) Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("المستندات وAPK والمضغوطات والملفات المخفية لا تظهر", style = MaterialTheme.typography.titleSmall)
+            Text("يحجب أندرويد هذه الملفات عن التطبيقات. لعرضها فعّل «الوصول لكل الملفات»: إذن اختياري يُمنح من إعدادات النظام ويمكنك سحبه في أي وقت.", style = MaterialTheme.typography.bodySmall)
+            TextButton({ openAllFilesSettings(ctx) }) { Text("تفعيل الوصول لكل الملفات") }
+        } }
+        val folderTree = remember(files) { FolderTree.build(files) }
+        val usedNodes = remember(mostUsed, folderTree) { mostUsed.mapNotNull { u -> FolderTree.find(folderTree, u.path)?.let { u to it } } }
+        if (usedNodes.isNotEmpty()) {
+            Text("الأكثر استخداماً (المجلدات)", style = MaterialTheme.typography.titleMedium)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                mostUsed.forEach { f -> UsedFileCard(f) { openUsed(f) } }
+                usedNodes.forEach { (u, n) -> UsedFolderCard(n, u.count) { vm.foldersStartPath = u.path; openFolders() } }
             }
         }
         HomeIconGrid(listOf(
@@ -281,16 +287,24 @@ private fun HomeTopBar(onMenu: () -> Unit, actions: List<HomeEntry>) {
     }
 }
 
-/** One of the five most-opened files: thumbnail for photos, a document tile for the rest. */
+/** One of the five most-entered folders: its size-coloured icon, name, file count and visit count. */
 @Composable
-private fun UsedFileCard(f: UsedFile, onClick: () -> Unit) {
-    Column(Modifier.width(96.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        val isImage = f.name.substringAfterLast('.', "").lowercase() in setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic")
-        if (isImage) WallThumb(f.path, Modifier.size(80.dp).clip(RoundedCornerShape(14.dp)), sizeDp = 80)
-        else Box(Modifier.size(80.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x22808080)), contentAlignment = Alignment.Center) { Text("📄", fontSize = 32.sp) }
-        Text(f.name, style = MaterialTheme.typography.labelSmall, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Text("فُتح ${f.count}×", style = MaterialTheme.typography.labelSmall)
+private fun UsedFolderCard(n: FolderNode, count: Int, onClick: () -> Unit) {
+    Column(Modifier.width(104.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        SizeFolderIcon(n.size, Modifier.size(72.dp, 58.dp))
+        Text(n.name, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        Text("${n.totalFiles} ملف", style = MaterialTheme.typography.labelSmall)
+        Text("دخول $count×", style = MaterialTheme.typography.labelSmall)
     }
+}
+
+/** Opens the system screen where the user can allow "all files access" for this app (Android 11+). */
+fun openAllFilesSettings(ctx: android.content.Context) {
+    val intents = listOf(
+        android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, android.net.Uri.parse("package:" + ctx.packageName)),
+        android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+    )
+    for (i in intents) { try { ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)); return } catch (e: Exception) { } }
 }
 
 /** One launcher-style entry of the Home screen: coloured icon tile + label. */
@@ -326,20 +340,25 @@ fun FoldersScreen(vm: AppViewModel, onOpen: (String) -> Unit, onBack: () -> Unit
     val files by vm.files.collectAsState()
     val showThumbs by vm.settings.showThumbs.collectAsState(initial = true)
     val sort = rememberScreenSort(vm, "folders", SortOrder.NAME_ASC, NO_TYPE_ORDERS)
-    var path by remember { mutableStateOf("") }
-    val root = remember(files) { FolderTree.build(files) }
+    var path by remember { mutableStateOf(vm.foldersStartPath.also { vm.foldersStartPath = "" }) }
+    LaunchedEffect(path) { if (path.isNotEmpty()) vm.recordFolder(path) }   // feeds "most used folders" on Home
+    val empties by vm.emptyDirs.collectAsState()
+    val allFiles by vm.allFilesAccess.collectAsState()
+    val ctx = LocalContext.current
+    var showHidden by remember { mutableStateOf(true) }
+    val root = remember(files, empties) { FolderTree.build(files, empties) }
     val node = FolderTree.find(root, path) ?: root
     // Back goes up one folder first, and leaves the screen only from the top.
     androidx.activity.compose.BackHandler(enabled = path.isNotEmpty()) { path = path.substringBeforeLast('/', "") }
     val cmp = sort.order.comparator()
-    val subfolders = remember(node, sort.order) {
-        node.children.values.sortedWith { a, b -> cmp.compare(SortKey(a.name, a.totalSize, a.newestMs, ""), SortKey(b.name, b.totalSize, b.newestMs, "")) }
+    val subfolders = remember(node, sort.order, showHidden) {
+        node.children.values.filter { showHidden || !it.name.startsWith(".") }.sortedWith { a, b -> cmp.compare(SortKey(a.name, a.totalSize, a.newestMs, ""), SortKey(b.name, b.totalSize, b.newestMs, "")) }
     }
-    val direct = remember(node, sort.order) { node.files.sortedByOrder(sort.order) }
+    val direct = remember(node, sort.order, showHidden) { node.files.filter { showHidden || !it.isHidden }.sortedByOrder(sort.order) }
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton({ if (path.isEmpty()) onBack() else path = path.substringBeforeLast('/', "") }) { Text(if (path.isEmpty()) "رجوع" else "↑ المجلد الأعلى") }
-            Spacer(Modifier.weight(1f)); SortChip(sort)
+            Spacer(Modifier.weight(1f)); FilterChip(showHidden, { showHidden = !showHidden }, { Text("المخفية") }); Spacer(Modifier.width(6.dp)); SortChip(sort)
         }
         // Breadcrumb like the system explorer: all files > internal storage > Download > ...
         Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
@@ -352,6 +371,11 @@ fun FoldersScreen(vm: AppViewModel, onOpen: (String) -> Unit, onBack: () -> Unit
             }
         }
         FolderSizeLegend()
+        if (android.os.Build.VERSION.SDK_INT >= 30 && !allFiles) Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("ترى هنا الصور والفيديو والصوت فقط", style = MaterialTheme.typography.titleSmall)
+            Text("يحجب أندرويد 11 فأحدث باقي الملفات (مستندات، APK، مضغوطات، مخفية) والمجلدات الفارغة عن التطبيقات. فعّل «الوصول لكل الملفات» لتظهر كلها كما في مستكشف النظام.", style = MaterialTheme.typography.bodySmall)
+            TextButton({ openAllFilesSettings(ctx) }) { Text("تفعيل الوصول لكل الملفات") }
+        } }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${node.totalFiles} ملف · ${fmtSize(node.totalSize)}", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
             if (path.isNotEmpty()) TextButton({ onOpen(path) }) { Text("عرض ملفاته كقائمة") }
@@ -478,9 +502,20 @@ fun SettingsScreen(vm: AppViewModel, mode: ThemeMode, onBack: () -> Unit) {
             Text("«اسألني» يعرض خيارات: داخل FileMind (للصور) أو فتح بواسطة تطبيق من النظام أو الافتراضي أو إظهار الملف في مستكشف النظام.", style = MaterialTheme.typography.bodySmall)
         }
         item {
-            Text("الملفات الأكثر استخداماً", style = MaterialTheme.typography.titleMedium)
-            Text("تظهر في الشاشة الرئيسية خمسة ملفات تفتحها أكثر من داخل التطبيق. العدّاد محلي على جهازك فقط.", style = MaterialTheme.typography.bodySmall)
+            Text("الأكثر استخداماً (المجلدات)", style = MaterialTheme.typography.titleMedium)
+            Text("تظهر في الشاشة الرئيسية خمسة مجلدات تدخلها أكثر من «المجلدات» و«المتصفح». العدّاد محلي على جهازك فقط.", style = MaterialTheme.typography.bodySmall)
             OutlinedButton({ vm.clearUsage() }) { Text("مسح سجل الأكثر استخداماً") }
+        }
+        item {
+            val all by vm.allFilesAccess.collectAsState()
+            val ctxA = LocalContext.current
+            Text("الوصول لكل الملفات", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (all) "مفعّل: تظهر المستندات وAPK والمضغوطات وغيرها مما يحجبه أندرويد عن التطبيقات، ويمكن حذفها مباشرة."
+                else "غير مفعّل: يحجب أندرويد 11 فأحدث الملفات غير الوسائط (مستندات، APK، مضغوطات، مخفية). هو إذن حساس يُمنح من إعدادات النظام ويمكنك سحبه في أي وقت.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (android.os.Build.VERSION.SDK_INT >= 30) OutlinedButton({ openAllFilesSettings(ctxA) }) { Text(if (all) "إدارة الإذن" else "تفعيل الوصول لكل الملفات") }
         }
         item {
             Text("سلة المحذوفات", style = MaterialTheme.typography.titleMedium)

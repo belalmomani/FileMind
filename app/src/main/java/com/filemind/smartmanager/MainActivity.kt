@@ -46,6 +46,11 @@ sealed interface Screen {
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
 
+    override fun onResume() {
+        super.onResume()
+        vm.refreshAllFilesAccess()   // the user may have just granted or removed "all files access" in system settings
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         LocalCrashLog.install(this)

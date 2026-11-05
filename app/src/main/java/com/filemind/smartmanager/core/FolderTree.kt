@@ -44,7 +44,7 @@ object FolderTree {
         return p.removePrefix("primary/").removePrefix("storage/emulated/0/")
     }
 
-    fun build(files: List<FileEntry>): FolderNode {
+    fun build(files: List<FileEntry>, emptyDirs: Collection<String> = emptyList()): FolderNode {
         val root = FolderNode("", "")
         for (f in files) {
             root.add(f)
@@ -55,6 +55,14 @@ object FolderTree {
                 node.add(f)
             }
             node.files += f
+        }
+        // Folders that hold no file at all (known from a real directory walk) still exist in the tree: black, 0 files.
+        for (p in emptyDirs) {
+            var node = root; var path = ""
+            for (seg in normalize(p).split('/').filter { it.isNotEmpty() }) {
+                path = if (path.isEmpty()) seg else "$path/$seg"
+                node = node.children.getOrPut(seg) { FolderNode(seg, path) }
+            }
         }
         return root
     }

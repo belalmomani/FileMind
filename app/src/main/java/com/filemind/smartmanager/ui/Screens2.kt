@@ -51,7 +51,8 @@ fun rememberDeleter(vm: AppViewModel, onFinished: () -> Unit): (List<FileEntry>)
     val permanent: (List<FileEntry>) -> Unit = { entries ->
         val cr = ctx.contentResolver
         val media = entries.filter { Uri.parse(it.path).authority == "media" }
-        val saf = entries - media.toSet()
+        val (localFiles, saf) = (entries - media.toSet()).partition { it.path.startsWith("file:") }
+        if (localFiles.isNotEmpty()) vm.deleteLocal(localFiles)   // files found by the real-storage walk
         if (saf.isNotEmpty()) {
             val ok = saf.all { runCatching { DocumentsContract.deleteDocument(cr, Uri.parse(it.path)) }.getOrDefault(false) }
             vm.logDelete(saf, ok, if (!ok) "تعذر حذف بعض الملفات" else null)

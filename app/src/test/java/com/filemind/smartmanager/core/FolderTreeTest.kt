@@ -46,6 +46,15 @@ class FolderTreeTest {
         assertEquals(0xFFFBC02D, FolderSize.SMALL.argb); assertEquals(0xFF212121, FolderSize.EMPTY.argb)
     }
 
+    @Test fun emptyFoldersAreInTheTreeAsBlackFolders() {
+        val root = FolderTree.build(listOf(f("A/B", 100)), listOf("A/empty", "Z", "A/B"))
+        val e = FolderTree.find(root, "A/empty")!!
+        assertEquals(0, e.totalFiles); assertEquals(FolderSize.EMPTY, e.size)
+        assertEquals(FolderSize.EMPTY, root.children.getValue("Z").size)
+        assertEquals(1, FolderTree.find(root, "A/B")!!.totalFiles)            // a folder that really has files is unaffected
+        assertEquals(FolderSize.SMALL, FolderTree.find(root, "A/B")!!.size)
+    }
+
     @Test fun emptyInputGivesAnEmptyRoot() {
         val root = FolderTree.build(emptyList())
         assertEquals(0, root.totalFiles); assertTrue(root.children.isEmpty()); assertEquals(FolderSize.EMPTY, root.size)

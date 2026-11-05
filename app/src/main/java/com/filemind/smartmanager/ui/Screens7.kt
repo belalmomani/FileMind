@@ -75,6 +75,7 @@ fun BrowserScreen(vm: AppViewModel, onBack: () -> Unit) {
     var textInput by remember { mutableStateOf("") }
     var pendingMove by remember { mutableStateOf(true) }
     val cur = stack.lastOrNull()
+    LaunchedEffect(cur?.docId) { cur?.docId?.let { id -> FolderTree.normalize(id).takeIf { it.isNotEmpty() }?.let { vm.recordFolder(it) } } }
     val folderTree = remember(files) { FolderTree.build(files) }
 
     LaunchedEffect(cur, reload) {

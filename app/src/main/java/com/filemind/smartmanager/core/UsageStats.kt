@@ -5,6 +5,7 @@ class UsageEntry(val path: String, val count: Int, val lastMs: Long)
 /** "Most used files": how many times each file was opened from inside FileMind. Local counters only; nothing leaves the device. */
 object UsageStats {
     const val MAX = 300
+    const val DIR = "dir:"   // key prefix: counters are kept for FOLDERS (entered from Folders / Browser)
 
     private fun order() = compareByDescending<UsageEntry> { it.count }.thenByDescending { it.lastMs }.thenBy { it.path }
 
